@@ -1,0 +1,7 @@
+comps.db
+uploads/
+cleaned/
+__pycache__/
+*.pyc
+Jefatura.xlsx
+.env
