@@ -301,9 +301,9 @@
             background: rgba(34, 197, 94, 0.06);
         }
         .drop-icon { font-size: 2rem; }
-        .drop-title { font-weight: 600; font-size: 0.9rem; color: #e2e8f0; }
-        .drop-hint { font-size: 0.75rem; color: #64748b; }
-        .drop-file-name { font-size: 0.8rem; color: #94a3b8; margin-top: 0.25rem; }
+        .drop-title { font-weight: 600; font-size: 0.95rem; color: #e2e8f0; }
+        .drop-hint { font-size: 0.78rem; color: #94a3b8; }
+        .drop-file-name { font-size: 0.82rem; color: #64748b; margin-top: 0.25rem; }
     </style>
 </head>
 <body>
@@ -313,13 +313,13 @@
             <h1>COMPS MDA</h1>
         </a>
         <div class="nav-links">
-            <a href="{{ url_for('index') }}" class="{% if request.endpoint == 'index' %}active{% endif %}">Inicio</a>
-            <a href="{{ url_for('analisis_cortesias') }}" class="{% if request.endpoint == 'analisis_cortesias' %}active{% endif %}">Cortesías</a>
-            <a href="{{ url_for('analisis_premios') }}" class="{% if request.endpoint == 'analisis_premios' %}active{% endif %}">Premios</a>
-            <a href="{{ url_for('analisis_resumen') }}" class="{% if request.endpoint == 'analisis_resumen' %}active{% endif %}">Resumen</a>
-            <a href="{{ url_for('control_invitaciones') }}" class="{% if request.endpoint == 'control_invitaciones' %}active{% endif %}">Control Inv.</a>
-            <a href="{{ url_for('auditoria_coinin_cero') }}" class="{% if request.endpoint == 'auditoria_coinin_cero' %}active{% endif %}">Auditoría</a>
-            <a href="{{ url_for('exportar_reportes') }}" class="{% if request.endpoint == 'exportar_reportes' %}active{% endif %}">Exportar</a>
+            <a href="{{ url_for('index') }}" class="{{ 'active' if request.endpoint == 'index' }}">Inicio</a>
+            <a href="{{ url_for('analisis_cortesias') }}" class="{{ 'active' if request.endpoint == 'analisis_cortesias' }}">Cortesías</a>
+            <a href="{{ url_for('analisis_premios') }}" class="{{ 'active' if request.endpoint == 'analisis_premios' }}">Premios</a>
+            <a href="{{ url_for('analisis_resumen') }}" class="{{ 'active' if request.endpoint == 'analisis_resumen' }}">Resumen</a>
+            <a href="{{ url_for('control_invitaciones') }}" class="{{ 'active' if request.endpoint == 'control_invitaciones' }}">Control Invitaciones</a>
+            <a href="{{ url_for('auditoria_coinin_cero') }}" class="{{ 'active' if request.endpoint == 'auditoria_coinin_cero' }}">Auditoría Coin In Cero</a>
+            <a href="{{ url_for('exportar_reportes') }}" class="{{ 'active' if request.endpoint == 'exportar_reportes' }}">📥 Exportar</a>
         </div>
     </nav>
 
@@ -335,6 +335,12 @@
         {% block content %}{% endblock %}
     </div>
 
+    <script>
+        function formatNum(n) {
+            if (n === null || n === undefined) return '0';
+            return Number(n).toLocaleString('es-CL');
+        }
+    </script>
     {% block scripts %}{% endblock %}
 </body>
 </html>

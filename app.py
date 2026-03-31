@@ -135,7 +135,7 @@ def limpiar_player_id(val):
 
 def cargar_srw(filepath):
     df = pd.read_excel(filepath, header=None, skiprows=3)
-    # Quitar primera columna vacia
+    # Quitar primera columna vacía
     df = df.iloc[:, 1:]
     df.columns = [
         'gaming_date', 'player_id', 'full_name', 'player_level',
@@ -152,7 +152,7 @@ def cargar_srw(filepath):
     df = df.dropna(subset=['player_id'])
     df['player_id'] = df['player_id'].astype(str).str.strip()
 
-    # gaming_date ya viene por jornada del sistema casino (9am-8am = 1 dia)
+    # gaming_date ya viene por jornada del sistema casino (9am-8am = 1 día)
     df['gaming_date'] = pd.to_datetime(df['gaming_date'], errors='coerce').dt.strftime('%Y-%m-%d')
     df = df.dropna(subset=['gaming_date'])
 
@@ -164,7 +164,7 @@ def cargar_srw(filepath):
 
 def cargar_cortesias(filepath):
     df = pd.read_excel(filepath, header=None, skiprows=8)
-    # Mapear por indice (archivo tiene celdas fusionadas)
+    # Mapear por índice (archivo tiene celdas fusionadas)
     df = df.rename(columns={
         6: 'fecha_jornada', 7: 'cliente_id', 10: 'nombre_cliente',
         14: 'descripcion_cat', 16: 'descripcion_prod', 19: 'micros',
@@ -183,7 +183,7 @@ def cargar_cortesias(filepath):
     df['fecha_jornada'] = pd.to_datetime(df['fecha_jornada'], errors='coerce').dt.strftime('%Y-%m-%d')
     df['micros'] = pd.to_numeric(df['micros'], errors='coerce').fillna(0)
     df['usuario_id'] = df['usuario_id'].astype(str).str.replace(r'\.0$', '', regex=True)
-    # nombre_usuario: conservar todos, incluso vacios
+    # nombre_usuario: conservar todos, incluso vacíos
     df['nombre_usuario'] = df['nombre_usuario'].fillna('')
 
     return df
@@ -205,7 +205,7 @@ def cargar_premios(filepath):
     df['cliente_id'] = df['cliente_id'].astype(str).str.strip().str.strip('x')
     df['transferencia_final'] = pd.to_numeric(df['transferencia_final'], errors='coerce').fillna(0)
 
-    # Convertir fecha a jornada (antes de 9am = dia anterior)
+    # Convertir fecha a jornada (antes de 9am = día anterior)
     df['fecha_dt'] = pd.to_datetime(df['fecha'], format='%d-%m-%Y %H:%M', errors='coerce')
     df = df.dropna(subset=['fecha_dt'])
     df['fecha_jornada'] = df['fecha_dt'].apply(
@@ -255,7 +255,7 @@ def cargar_datos():
             if not f or f.filename == '':
                 continue
             if not allowed_file(f.filename):
-                flash(f'Archivo no valido: {f.filename}. Solo .xls y .xlsx', 'error')
+                flash(f'Archivo no válido: {f.filename}. Solo .xls y .xlsx', 'error')
                 continue
 
             filename = secure_filename(f.filename)
@@ -287,7 +287,7 @@ def cargar_datos():
             db.commit()
             flash(' | '.join(resultados), 'success')
         else:
-            flash('No se selecciono ningun archivo.', 'error')
+            flash('No se seleccionó ningún archivo.', 'error')
 
     except Exception as e:
         db.rollback()
@@ -297,7 +297,7 @@ def cargar_datos():
 
 
 def build_date_filter(col, anio, mes):
-    """Construye clausula WHERE y params para filtro ano/mes."""
+    """Construye cláusula WHERE y params para filtro año/mes."""
     conditions = []
     params = []
     if anio:
@@ -311,7 +311,7 @@ def build_date_filter(col, anio, mes):
 
 
 def get_anios_meses(db):
-    """Obtiene anos y meses disponibles de las 3 tablas."""
+    """Obtiene años y meses disponibles de las 3 tablas."""
     rows = db.execute("""
         SELECT DISTINCT fecha FROM (
             SELECT SUBSTR(gaming_date, 1, 7) as fecha FROM srw_jugadores WHERE gaming_date IS NOT NULL
@@ -337,7 +337,7 @@ def analisis_cortesias():
     cw_solo, cp_solo = build_date_filter('fecha_jornada', anio, mes)
     sw, sp = build_date_filter('gaming_date', anio, mes)
 
-    # Cortesias por jugador con su coin-in total
+    # Cortesías por jugador con su coin-in total
     resumen = db.execute(f"""
         SELECT
             c.cliente_id,
@@ -366,7 +366,7 @@ def analisis_cortesias():
         ORDER BY monto_cortesias DESC
     """, sp + cp).fetchall()
 
-    # Cortesias por categoria
+    # Cortesías por categoría
     por_categoria = db.execute(f"""
         SELECT descripcion_cat, COUNT(*) as cantidad,
                SUM(micros) as monto_total
@@ -375,7 +375,7 @@ def analisis_cortesias():
         ORDER BY monto_total DESC
     """, cp_solo).fetchall()
 
-    # Productos por categoria (para desglose)
+    # Productos por categoría (para desglose)
     productos_por_cat = {}
     rows = db.execute(f"""
         SELECT descripcion_cat, descripcion_prod, COUNT(*) as cantidad,
@@ -390,7 +390,7 @@ def analisis_cortesias():
             productos_por_cat[cat] = []
         productos_por_cat[cat].append(dict(r))
 
-    # Cortesias por dia
+    # Cortesías por día
     dia_where, dia_params = build_date_filter('fecha_jornada', anio, mes)
     if dia_where:
         dia_where = dia_where + " AND fecha_jornada IS NOT NULL"
@@ -473,7 +473,7 @@ def analisis_premios():
         ORDER BY monto_total DESC
     """, pp_solo).fetchall()
 
-    # Premios por dia (jornada)
+    # Premios por día (jornada)
     dia_where, dia_params = build_date_filter('fecha_jornada', anio, mes)
     if dia_where:
         dia_where = dia_where + " AND fecha_jornada IS NOT NULL"
@@ -515,7 +515,7 @@ def analisis_resumen():
     cw, cparam = build_date_filter('fecha_jornada', anio, mes)
     pw, pparam = build_date_filter('fecha_jornada', anio, mes)
 
-    # Resumen general de jugadores con cortesias + premios
+    # Resumen general de jugadores con cortesías + premios
     jugadores = db.execute(f"""
         SELECT
             s.player_id,
@@ -612,13 +612,41 @@ def control_invitaciones():
     db = get_db()
     anio = request.args.get('anio', '')
     mes = request.args.get('mes', '')
+    area = request.args.get('area', '')
+    jefe = request.args.get('jefe', '')
     anios, meses_disp = get_anios_meses(db)
+
+    # Áreas disponibles
+    areas = [r['area'] for r in db.execute(
+        "SELECT DISTINCT area FROM jefaturas WHERE area != '' ORDER BY area"
+    ).fetchall()]
+
+    # Jefes filtrados por área
+    if area:
+        jefes_disp = db.execute(
+            "SELECT usuario_id, nombre FROM jefaturas WHERE area = ? ORDER BY nombre", (area,)
+        ).fetchall()
+    else:
+        jefes_disp = db.execute(
+            "SELECT usuario_id, nombre FROM jefaturas ORDER BY nombre"
+        ).fetchall()
+    jefes_disp = [(r['usuario_id'], r['nombre']) for r in jefes_disp]
+
+    # Filtros de jefatura para cortesías
+    jefe_filter = ""
+    jefe_params = []
+    if jefe:
+        jefe_filter = " AND c.usuario_id = ?"
+        jefe_params = [jefe]
+    elif area:
+        jefe_filter = " AND c.usuario_id IN (SELECT usuario_id FROM jefaturas WHERE area = ?)"
+        jefe_params = [area]
 
     sw, sp = build_date_filter('s.gaming_date', anio, mes)
     cw, cparam = build_date_filter('c.fecha_jornada', anio, mes)
     pw, pparam = build_date_filter('p.fecha_jornada', anio, mes)
 
-    # Dias totales del periodo (para % asistencia)
+    # Días totales del periodo (para % asistencia)
     sw_solo, sp_solo = build_date_filter('gaming_date', anio, mes)
     dias_totales_row = db.execute(
         f"SELECT COUNT(DISTINCT gaming_date) as dias FROM srw_jugadores {sw_solo}",
@@ -632,11 +660,19 @@ def control_invitaciones():
     ).fetchone()
     pct_primario = prim_row['porcentaje'] if prim_row else 0
 
-    # Mapeo categoria -> porcentaje
+    # Mapeo categoría -> porcentaje
     cat_rows = db.execute(
         "SELECT categoria, porcentaje FROM categorias_nivel WHERE categoria != 'Primario'"
     ).fetchall()
     pct_categoria = {r['categoria']: r['porcentaje'] for r in cat_rows}
+
+    # Construir subconsulta de cortesías con filtro de jefatura
+    cw_inner = cw
+    if jefe_filter:
+        if cw_inner:
+            cw_inner = cw_inner + jefe_filter
+        else:
+            cw_inner = "WHERE 1=1" + jefe_filter
 
     jugadores = db.execute(f"""
         SELECT
@@ -654,7 +690,7 @@ def control_invitaciones():
             SELECT cliente_id,
                    COUNT(*) as total_cortesias,
                    SUM(micros) as monto_micros
-            FROM cortesias c {cw}
+            FROM cortesias c {cw_inner}
             GROUP BY cliente_id
         ) c ON s.player_id = c.cliente_id
         LEFT JOIN (
@@ -668,9 +704,9 @@ def control_invitaciones():
         GROUP BY s.player_id
         HAVING COALESCE(c.total_cortesias, 0) > 0
         ORDER BY coin_in_mensual DESC
-    """, cparam + pparam + sp).fetchall()
+    """, cparam + jefe_params + pparam + sp).fetchall()
 
-    # Calcular invitaciones en Python (necesita mapeo de categoria)
+    # Calcular invitaciones en Python (necesita mapeo de categoría)
     resultados = []
     for j in jugadores:
         nivel = j['nivel'] or ''
@@ -697,13 +733,58 @@ def control_invitaciones():
             'pct_cat': pct_cat,
         })
 
+    # Cortesías para gráfico de torta
+    cw_chart = build_date_filter('c.fecha_jornada', anio, mes)
+    chart_where = cw_chart[0] if cw_chart[0] else ""
+    chart_params = list(cw_chart[1])
+
+    if area:
+        # Sección seleccionada → agrupar por jefatura (nombre del jefe)
+        if chart_where:
+            chart_where += " AND j.area = ?"
+        else:
+            chart_where = "WHERE j.area = ?"
+        chart_params.append(area)
+        chart_rows = db.execute(f"""
+            SELECT j.nombre as etiqueta, COUNT(*) as cantidad
+            FROM cortesias c
+            LEFT JOIN jefaturas j ON c.usuario_id = j.usuario_id
+            {chart_where}
+            GROUP BY j.nombre
+            ORDER BY cantidad DESC
+        """, chart_params).fetchall()
+        chart_titulo = f"Cortesías por Jefe — {area}"
+    else:
+        # Todas las secciones → agrupar por área
+        if chart_where:
+            chart_where += " AND j.area IS NOT NULL AND j.area != ''"
+        else:
+            chart_where = "WHERE j.area IS NOT NULL AND j.area != ''"
+        chart_rows = db.execute(f"""
+            SELECT j.area as etiqueta, COUNT(*) as cantidad
+            FROM cortesias c
+            LEFT JOIN jefaturas j ON c.usuario_id = j.usuario_id
+            {chart_where}
+            GROUP BY j.area
+            ORDER BY cantidad DESC
+        """, chart_params).fetchall()
+        chart_titulo = "Cortesías por Sección"
+
+    chart_labels = [r['etiqueta'] or 'Sin asignar' for r in chart_rows]
+    chart_cantidades = [r['cantidad'] for r in chart_rows]
+
     return render_template('control_invitaciones.html',
                            resultados=resultados,
                            dias_totales=dias_totales,
                            pct_primario=pct_primario,
                            pct_categoria=pct_categoria,
+                           chart_labels=chart_labels,
+                           chart_cantidades=chart_cantidades,
+                           chart_titulo=chart_titulo,
                            anios=anios, meses_disp=meses_disp,
-                           anio_actual=anio, mes_actual=mes)
+                           areas=areas, jefes_disp=jefes_disp,
+                           anio_actual=anio, mes_actual=mes,
+                           area_actual=area, jefe_actual=jefe)
 
 
 @app.route('/auditoria/coinin-cero')
@@ -715,12 +796,12 @@ def auditoria_coinin_cero():
     jefe = request.args.get('jefe', '')
     anios, meses_disp = get_anios_meses(db)
 
-    # Areas disponibles
+    # Áreas disponibles
     areas = [r['area'] for r in db.execute(
         "SELECT DISTINCT area FROM jefaturas WHERE area != '' ORDER BY area"
     ).fetchall()]
 
-    # Jefes filtrados por area
+    # Jefes filtrados por área
     if area:
         jefes_disp = db.execute(
             "SELECT usuario_id, nombre FROM jefaturas WHERE area = ? ORDER BY nombre", (area,)
@@ -750,7 +831,7 @@ def auditoria_coinin_cero():
     if cw:
         where_parts.append(cw.replace("WHERE ", ""))
         all_params.extend(cp)
-    # Jugadores sin coin_in en esa jornada especifica (no existe en SRW ese dia, o coin_in = 0)
+    # Jugadores sin coin_in en esa jornada específica (no existe en SRW ese día, o coin_in = 0)
     where_parts.append("""(
         NOT EXISTS (
             SELECT 1 FROM srw_jugadores s
@@ -794,8 +875,54 @@ def auditoria_coinin_cero():
         ORDER BY c.fecha_jornada DESC, monto_cortesias DESC
     """, all_params).fetchall()
 
+    # Datos para gráfico de torta
+    cw_chart = build_date_filter('c.fecha_jornada', anio, mes)
+    chart_where = cw_chart[0] if cw_chart[0] else ""
+    chart_params = list(cw_chart[1])
+    # Solo casos coin_in cero
+    coin_zero_cond = """NOT EXISTS (
+        SELECT 1 FROM srw_jugadores s
+        WHERE s.player_id = c.cliente_id
+          AND s.gaming_date = c.fecha_jornada
+          AND s.coin_in > 0
+    )"""
+    if chart_where:
+        chart_where = chart_where.replace("WHERE ", "WHERE " + coin_zero_cond + " AND ")
+    else:
+        chart_where = "WHERE " + coin_zero_cond
+
+    if area:
+        chart_where += " AND j.area = ?"
+        chart_params.append(area)
+        chart_rows = db.execute(f"""
+            SELECT j.nombre as etiqueta, COUNT(*) as cantidad
+            FROM cortesias c
+            LEFT JOIN jefaturas j ON c.usuario_id = j.usuario_id
+            {chart_where}
+            GROUP BY j.nombre
+            ORDER BY cantidad DESC
+        """, chart_params).fetchall()
+        chart_titulo = f"Casos Coin In Cero por Jefe — {area}"
+    else:
+        chart_where += " AND j.area IS NOT NULL AND j.area != ''"
+        chart_rows = db.execute(f"""
+            SELECT j.area as etiqueta, COUNT(*) as cantidad
+            FROM cortesias c
+            LEFT JOIN jefaturas j ON c.usuario_id = j.usuario_id
+            {chart_where}
+            GROUP BY j.area
+            ORDER BY cantidad DESC
+        """, chart_params).fetchall()
+        chart_titulo = "Casos Coin In Cero por Sección"
+
+    chart_labels = [r['etiqueta'] or 'Sin asignar' for r in chart_rows]
+    chart_cantidades = [r['cantidad'] for r in chart_rows]
+
     return render_template('auditoria_coinin_cero.html',
                            resultados=resultados,
+                           chart_labels=chart_labels,
+                           chart_cantidades=chart_cantidades,
+                           chart_titulo=chart_titulo,
                            anios=anios, meses_disp=meses_disp,
                            areas=areas, jefes_disp=jefes_disp,
                            anio_actual=anio, mes_actual=mes,
@@ -823,7 +950,7 @@ def exportar_generar():
     secciones = request.form.getlist('secciones')
 
     if not secciones:
-        flash('Selecciona al menos una seccion.', 'error')
+        flash('Selecciona al menos una sección.', 'error')
         return redirect(url_for('exportar_reportes'))
 
     output = BytesIO()

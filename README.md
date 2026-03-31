@@ -1,2 +1,0 @@
-# COMPS-MDA
-Auditoria

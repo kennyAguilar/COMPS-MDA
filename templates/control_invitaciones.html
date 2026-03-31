@@ -25,6 +25,24 @@
                 </select>
             </div>
             <div>
+                <label for="area">Sección</label><br>
+                <select name="area" id="area" onchange="this.form.submit()">
+                    <option value="">Todas</option>
+                    {% for a in areas %}
+                        <option value="{{ a }}" {% if a == area_actual %}selected{% endif %}>{{ a }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="jefe">Jefe</label><br>
+                <select name="jefe" id="jefe">
+                    <option value="">Todos</option>
+                    {% for j in jefes_disp %}
+                        <option value="{{ j[0] }}" {% if j[0] == jefe_actual %}selected{% endif %}>{{ j[1] }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
                 <button class="btn btn-primary" type="submit">Filtrar</button>
             </div>
         </div>
@@ -40,6 +58,16 @@
     {% endif %}
 </div>
 
+{% if chart_labels and chart_cantidades and chart_labels|length > 0 %}
+<div class="card">
+    <h2>📊 {{ chart_titulo }}</h2>
+    <div style="display: flex; align-items: center; justify-content: center; gap: 2rem; flex-wrap: wrap;">
+        <canvas id="pieChart" width="320" height="320" style="max-width: 320px;"></canvas>
+        <div id="pieLegend" style="font-size: 0.82rem;"></div>
+    </div>
+</div>
+{% endif %}
+
 {% if resultados is not none %}
 <div class="card">
     {% if resultados|length > 0 %}
@@ -48,29 +76,31 @@
     <div class="table-wrapper">
         <table class="table-compact" style="table-layout:fixed; width:100%;">
             <colgroup>
-                <col style="width:28%">
+                <col style="width:25%">
                 <col style="width:7%">
+                <col style="width:4%">
                 <col style="width:5%">
-                <col style="width:5%">
+                <col style="width:4%">
+                <col style="width:8%">
+                <col style="width:9%">
+                <col style="width:9%">
                 <col style="width:5%">
                 <col style="width:9%">
                 <col style="width:10%">
-                <col style="width:10%">
-                <col style="width:10%">
-                <col style="width:11%">
             </colgroup>
             <thead>
                 <tr>
-                    <th>Nombre Cliente</th>
-                    <th class="text-center">Nivel</th>
-                    <th class="text-center">Días</th>
-                    <th class="text-center">% Asis.</th>
-                    <th class="text-center">Prem.</th>
-                    <th class="text-right">$ Premios</th>
-                    <th class="text-right">Coin In</th>
-                    <th class="text-right">Invitación Max.</th>
-                    <th class="text-right">Cortesías</th>
-                    <th class="text-right">Saldo Disp.</th>
+                    <th class="sortable" data-col="0" data-type="text">Nombre Cliente <span class="sort-icon">⇅</span></th>
+                    <th class="text-center sortable" data-col="1" data-type="text">Nivel <span class="sort-icon">⇅</span></th>
+                    <th class="text-center sortable" data-col="2" data-type="num">Días <span class="sort-icon">⇅</span></th>
+                    <th class="text-center sortable" data-col="3" data-type="num">% Asis. <span class="sort-icon">⇅</span></th>
+                    <th class="text-center sortable" data-col="4" data-type="num">Prem. <span class="sort-icon">⇅</span></th>
+                    <th class="text-right sortable" data-col="5" data-type="num">$ Premios <span class="sort-icon">⇅</span></th>
+                    <th class="text-right sortable" data-col="6" data-type="num">Coin In <span class="sort-icon">⇅</span></th>
+                    <th class="text-right sortable" data-col="7" data-type="num">Invitación Max. <span class="sort-icon">⇅</span></th>
+                    <th class="text-center sortable" data-col="8" data-type="num"># Cort. <span class="sort-icon">⇅</span></th>
+                    <th class="text-right sortable" data-col="9" data-type="num">$ Cortesías <span class="sort-icon">⇅</span></th>
+                    <th class="text-right sortable" data-col="10" data-type="num">Saldo Disp. <span class="sort-icon">⇅</span></th>
                 </tr>
             </thead>
             <tbody>
@@ -84,6 +114,7 @@
                     <td class="text-right">{{ "{:,.0f}".format(r.monto_premios) }}</td>
                     <td class="text-right">{{ "{:,.0f}".format(r.coin_in_mensual) }}</td>
                     <td class="text-right">{{ "{:,.0f}".format(r.invitacion_mensual) }}</td>
+                    <td class="text-center">{{ r.total_cortesias }}</td>
                     <td class="text-right">{{ "{:,.0f}".format(r.monto_micros) }}</td>
                     <td class="text-right" style="font-weight:600; color:{{ '#22c55e' if r.saldo >= 0 else '#ef4444' }};">{{ "{:,.0f}".format(r.saldo) }}</td>
                 </tr>
@@ -96,4 +127,101 @@
     {% endif %}
 </div>
 {% endif %}
+{% endblock %}
+
+{% block scripts %}
+<style>
+.sortable { cursor: pointer; user-select: none; }
+.sortable:hover { color: #7dd3fc; }
+.sort-icon { font-size: 0.65rem; opacity: 0.4; margin-left: 2px; }
+.sortable.asc .sort-icon::after { content: '▲'; }
+.sortable.desc .sort-icon::after { content: '▼'; }
+.sortable.asc .sort-icon, .sortable.desc .sort-icon { opacity: 1; }
+</style>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const table = document.querySelector('.table-compact');
+    if (!table) return;
+    const tbody = table.querySelector('tbody');
+    const headers = table.querySelectorAll('th.sortable');
+    let currentCol = -1, ascending = true;
+
+    headers.forEach(th => {
+        th.addEventListener('click', function() {
+            const col = parseInt(this.dataset.col);
+            const type = this.dataset.type;
+            if (currentCol === col) { ascending = !ascending; }
+            else { ascending = true; currentCol = col; }
+
+            headers.forEach(h => { h.classList.remove('asc','desc'); h.querySelector('.sort-icon').textContent = '⇅'; });
+            this.classList.add(ascending ? 'asc' : 'desc');
+            this.querySelector('.sort-icon').textContent = '';
+
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+            rows.sort((a, b) => {
+                let va = a.cells[col].textContent.trim();
+                let vb = b.cells[col].textContent.trim();
+                if (type === 'num') {
+                    va = parseFloat(va.replace(/[^0-9.\-]/g, '')) || 0;
+                    vb = parseFloat(vb.replace(/[^0-9.\-]/g, '')) || 0;
+                    return ascending ? va - vb : vb - va;
+                }
+                return ascending ? va.localeCompare(vb, 'es') : vb.localeCompare(va, 'es');
+            });
+            rows.forEach(r => tbody.appendChild(r));
+        });
+    });
+
+    // Pie chart — Cortesías por Sección
+    const canvas = document.getElementById('pieChart');
+    if (canvas) {
+        const labels = {{ chart_labels | tojson }};
+        const data = {{ chart_cantidades | tojson }};
+        const colors = ['#38bdf8','#22c55e','#fbbf24','#f43f5e','#a78bfa','#fb923c','#2dd4bf','#e879f9','#94a3b8','#60a5fa'];
+        const total = data.reduce((s, v) => s + v, 0);
+        const ctx = canvas.getContext('2d');
+        const cx = canvas.width / 2, cy = canvas.height / 2, r = Math.min(cx, cy) - 16;
+        let startAngle = -Math.PI / 2;
+
+        // Draw slices
+        data.forEach((val, i) => {
+            const slice = (val / total) * 2 * Math.PI;
+            ctx.beginPath();
+            ctx.moveTo(cx, cy);
+            ctx.arc(cx, cy, r, startAngle, startAngle + slice);
+            ctx.closePath();
+            ctx.fillStyle = colors[i % colors.length];
+            ctx.fill();
+            ctx.strokeStyle = '#0f172a';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Label inside slice
+            if (val / total > 0.05) {
+                const mid = startAngle + slice / 2;
+                const lx = cx + r * 0.6 * Math.cos(mid);
+                const ly = cy + r * 0.6 * Math.sin(mid);
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 12px Segoe UI, sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(val.toLocaleString(), lx, ly);
+            }
+            startAngle += slice;
+        });
+
+        // Legend
+        const legend = document.getElementById('pieLegend');
+        if (legend) {
+            legend.innerHTML = labels.map((l, i) => {
+                const pct = total > 0 ? (data[i] / total * 100).toFixed(1) : 0;
+                return '<div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.4rem;">' +
+                    '<span style="display:inline-block;width:14px;height:14px;border-radius:3px;background:' + colors[i % colors.length] + ';"></span>' +
+                    '<span style="color:#e2e8f0;">' + l + '</span>' +
+                    '<span style="color:#64748b;font-size:0.75rem;">(' + data[i].toLocaleString() + ' — ' + pct + '%)</span></div>';
+            }).join('');
+        }
+    }
+});
+</script>
 {% endblock %}

@@ -48,6 +48,16 @@
     </form>
 </div>
 
+{% if chart_labels and chart_cantidades and chart_labels|length > 0 %}
+<div class="card">
+    <h2>📊 {{ chart_titulo }}</h2>
+    <div style="display: flex; align-items: center; justify-content: center; gap: 2rem; flex-wrap: wrap;">
+        <canvas id="pieChart" width="320" height="320" style="max-width: 320px;"></canvas>
+        <div id="pieLegend" style="font-size: 0.82rem;"></div>
+    </div>
+</div>
+{% endif %}
+
 {% if resultados is not none %}
 <div class="card">
     {% if resultados|length > 0 %}
@@ -68,15 +78,15 @@
             </colgroup>
             <thead>
                 <tr>
-                    <th>Jornada</th>
-                    <th>Nombre Cliente</th>
-                    <th class="text-right">Coin In</th>
-                    <th class="text-right">Cort.</th>
-                    <th class="text-right">$ Cortesías</th>
-                    <th class="text-center">Premio</th>
-                    <th class="text-right">$ Premios</th>
-                    <th>Área</th>
-                    <th>Autorizó</th>
+                    <th class="sortable" data-col="0" data-type="text">Jornada <span class="sort-icon"></span></th>
+                    <th class="sortable" data-col="1" data-type="text">Nombre Cliente <span class="sort-icon"></span></th>
+                    <th class="sortable text-right" data-col="2" data-type="num">Coin In <span class="sort-icon"></span></th>
+                    <th class="sortable text-right" data-col="3" data-type="num">Cort. <span class="sort-icon"></span></th>
+                    <th class="sortable text-right" data-col="4" data-type="num">$ Cortesías <span class="sort-icon"></span></th>
+                    <th class="sortable text-center" data-col="5" data-type="text">Premio <span class="sort-icon"></span></th>
+                    <th class="sortable text-right" data-col="6" data-type="num">$ Premios <span class="sort-icon"></span></th>
+                    <th class="sortable" data-col="7" data-type="text">Área <span class="sort-icon"></span></th>
+                    <th class="sortable" data-col="8" data-type="text">Autorizó <span class="sort-icon"></span></th>
                 </tr>
             </thead>
             <tbody>
@@ -104,6 +114,13 @@
 {% endblock %}
 
 {% block scripts %}
+<style>
+.sortable { cursor: pointer; user-select: none; -webkit-user-select: none; }
+.sortable:hover { color: #38bdf8; }
+.sort-icon::after { content: '\25B2\25BC'; font-size: 0.55em; opacity: 0.3; margin-left: 4px; vertical-align: middle; }
+.sortable.asc .sort-icon::after { content: '\25B2'; opacity: 1; font-size: 0.7em; }
+.sortable.desc .sort-icon::after { content: '\25BC'; opacity: 1; font-size: 0.7em; }
+</style>
 <script>
 // Filtrado dependiente de jefe según área
 const areaSel = document.getElementById('area');
@@ -111,6 +128,83 @@ const jefeSel = document.getElementById('jefe');
 const jefeOrig = Array.from(jefeSel.options);
 areaSel.addEventListener('change', function() {
     document.getElementById('filtros-form').submit();
+});
+
+// Ordenamiento de columnas
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.sortable').forEach(th => {
+        th.addEventListener('click', function() {
+            const table = th.closest('table');
+            const tbody = table.querySelector('tbody');
+            const col = parseInt(th.dataset.col);
+            const type = th.dataset.type;
+            const isAsc = th.classList.contains('asc');
+            table.querySelectorAll('.sortable').forEach(h => h.classList.remove('asc', 'desc'));
+            th.classList.add(isAsc ? 'desc' : 'asc');
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+            rows.sort((a, b) => {
+                let va = a.children[col].textContent.trim();
+                let vb = b.children[col].textContent.trim();
+                if (type === 'num') {
+                    va = parseFloat(va.replace(/[^\d.\-]/g, '')) || 0;
+                    vb = parseFloat(vb.replace(/[^\d.\-]/g, '')) || 0;
+                } else {
+                    va = va.toLowerCase(); vb = vb.toLowerCase();
+                }
+                if (va < vb) return isAsc ? 1 : -1;
+                if (va > vb) return isAsc ? -1 : 1;
+                return 0;
+            });
+            rows.forEach(r => tbody.appendChild(r));
+        });
+    });
+
+    // Pie chart
+    const canvas = document.getElementById('pieChart');
+    if (canvas) {
+        const labels = {{ chart_labels | tojson }};
+        const data = {{ chart_cantidades | tojson }};
+        const colors = ['#38bdf8','#22c55e','#fbbf24','#f43f5e','#a78bfa','#fb923c','#2dd4bf','#e879f9','#94a3b8','#60a5fa'];
+        const total = data.reduce((s, v) => s + v, 0);
+        const ctx = canvas.getContext('2d');
+        const cx = canvas.width / 2, cy = canvas.height / 2, r = Math.min(cx, cy) - 16;
+        let startAngle = -Math.PI / 2;
+
+        data.forEach((val, i) => {
+            const slice = (val / total) * 2 * Math.PI;
+            ctx.beginPath();
+            ctx.moveTo(cx, cy);
+            ctx.arc(cx, cy, r, startAngle, startAngle + slice);
+            ctx.closePath();
+            ctx.fillStyle = colors[i % colors.length];
+            ctx.fill();
+            ctx.strokeStyle = '#0f172a';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            if (val / total > 0.05) {
+                const mid = startAngle + slice / 2;
+                const lx = cx + r * 0.6 * Math.cos(mid);
+                const ly = cy + r * 0.6 * Math.sin(mid);
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 12px Segoe UI, sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(val.toLocaleString(), lx, ly);
+            }
+            startAngle += slice;
+        });
+
+        const legend = document.getElementById('pieLegend');
+        if (legend) {
+            legend.innerHTML = labels.map((l, i) => {
+                const pct = total > 0 ? (data[i] / total * 100).toFixed(1) : 0;
+                return '<div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.4rem;">' +
+                    '<span style="display:inline-block;width:14px;height:14px;border-radius:3px;background:' + colors[i % colors.length] + ';"></span>' +
+                    '<span style="color:#e2e8f0;">' + l + '</span>' +
+                    '<span style="color:#64748b;font-size:0.75rem;">(' + data[i].toLocaleString() + ' — ' + pct + '%)</span></div>';
+            }).join('');
+        }
+    }
 });
 </script>
 {% endblock %}

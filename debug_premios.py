@@ -58,7 +58,7 @@ if jess_id:
         for p in pp:
             print(f"    premio: fecha={p['fecha_jornada']} monto={p['transferencia_final']} tipo={p['tipo_pago']}")
     else:
-        print("    NINGUN premio encontrado")
+        print("    NINGÚN premio encontrado")
         # Buscar con LIKE
         print(f"\n  Buscando premios con LIKE '%{jess_id[-6:]}%'")
         pp2 = db.execute("SELECT cliente_id, fecha_jornada, transferencia_final FROM premios WHERE cliente_id LIKE ?", (f"%{jess_id[-6:]}%",)).fetchall()
