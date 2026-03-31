@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+
+{% block title %}COMPS MDA - Cortesías{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>🍽️ Análisis de Cortesías vs Coin In</h2>
+
+    <form method="get" style="margin-bottom: 1rem; display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+        <label style="color: #aaa;">Filtrar:</label>
+        <select name="anio" style="padding: 6px 12px; border-radius: 6px; background: #1e293b; color: #e2e8f0; border: 1px solid #334155;">
+            <option value="">Año: Todos</option>
+            {% for a in anios %}
+            <option value="{{ a }}" {% if a == anio_actual %}selected{% endif %}>{{ a }}</option>
+            {% endfor %}
+        </select>
+        <select name="mes" style="padding: 6px 12px; border-radius: 6px; background: #1e293b; color: #e2e8f0; border: 1px solid #334155;">
+            <option value="">Mes: Todos</option>
+            {% for m in meses_disp %}
+            <option value="{{ m }}" {% if m == mes_actual %}selected{% endif %}>
+                {{ {'01':'Enero','02':'Febrero','03':'Marzo','04':'Abril','05':'Mayo','06':'Junio','07':'Julio','08':'Agosto','09':'Septiembre','10':'Octubre','11':'Noviembre','12':'Diciembre'}.get(m, m) }}
+            </option>
+            {% endfor %}
+        </select>
+        <button type="submit" style="padding: 6px 18px; border-radius: 6px; background: #2563eb; color: #fff; border: none; cursor: pointer; font-weight: 600;">Aplicar</button>
+        {% if anio_actual or mes_actual %}
+        <a href="{{ request.path }}" style="padding: 6px 14px; border-radius: 6px; background: #334155; color: #94a3b8; text-decoration: none; font-size: 0.85rem;">Limpiar</a>
+        {% endif %}
+    </form>
+
+    <div class="kpi-grid">
+        <div class="kpi">
+            <div class="number">{{ "{:,.0f}".format(totales.total_cortesias) }}</div>
+            <div class="label">Total cortesías</div>
+        </div>
+        <div class="kpi">
+            <div class="number green">${{ "{:,.0f}".format(totales.monto_total or 0) }}</div>
+            <div class="label">Monto cortesías</div>
+        </div>
+        <div class="kpi">
+            <div class="number purple">{{ "{:,.0f}".format(totales.clientes_unicos) }}</div>
+            <div class="label">Clientes únicos</div>
+        </div>
+        <div class="kpi">
+            <div class="number yellow">${{ "{:,.0f}".format(total_coin_in) }}</div>
+            <div class="label">Total Coin In</div>
+        </div>
+        <div class="kpi">
+            <div class="number {% if total_coin_in > 0 %}{% if (totales.monto_total or 0) / total_coin_in * 100 > 1 %}red{% else %}green{% endif %}{% endif %}">
+                {% if total_coin_in > 0 %}
+                    {{ "%.3f"|format((totales.monto_total or 0) / total_coin_in * 100) }}%
+                {% else %}
+                    0%
+                {% endif %}
+            </div>
+            <div class="label">% Cortesías / Coin In</div>
+        </div>
+    </div>
+</div>
+
+<!-- Por categoría -->
+<div class="card">
+    <h2>📦 Cortesías por Categoría</h2>
+    <p class="text-muted mb-1">Click en una categoría para ver el desglose por producto</p>
+    <div class="table-wrapper">
+        <table>
+            <thead>
+                <tr>
+                    <th>Categoría</th>
+                    <th class="text-right">Cantidad</th>
+                    <th class="text-right">Monto Total</th>
+                    <th class="text-right">% del Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for cat in por_categoria %}
+                <tr class="cat-row" style="cursor: pointer;" onclick="toggleProds('cat-{{ cat.descripcion_cat|replace(' ', '_') }}')">
+                    <td><span class="toggle-icon" id="icon-cat-{{ cat.descripcion_cat|replace(' ', '_') }}">▶</span> {{ cat.descripcion_cat }}</td>
+                    <td class="text-right">{{ "{:,.0f}".format(cat.cantidad) }}</td>
+                    <td class="text-right">${{ "{:,.0f}".format(cat.monto_total or 0) }}</td>
+                    <td class="text-right">
+                        {% if totales.monto_total %}
+                            {{ "%.1f"|format((cat.monto_total or 0) / totales.monto_total * 100) }}%
+                        {% else %}0%{% endif %}
+                    </td>
+                </tr>
+                {% if cat.descripcion_cat in productos_por_cat %}
+                {% for prod in productos_por_cat[cat.descripcion_cat] %}
+                <tr class="prod-row cat-{{ cat.descripcion_cat|replace(' ', '_') }}" style="display: none; background: #1a2332;">
+                    <td style="padding-left: 2.5rem; color: #94a3b8;">↳ {{ prod.descripcion_prod }}</td>
+                    <td class="text-right" style="color: #94a3b8;">{{ "{:,.0f}".format(prod.cantidad) }}</td>
+                    <td class="text-right" style="color: #94a3b8;">${{ "{:,.0f}".format(prod.monto_total or 0) }}</td>
+                    <td class="text-right" style="color: #94a3b8;">
+                        {% if cat.monto_total %}
+                            {{ "%.1f"|format((prod.monto_total or 0) / cat.monto_total * 100) }}%
+                        {% else %}0%{% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+                {% endif %}
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+function toggleProds(cls) {
+    var rows = document.querySelectorAll('.' + cls);
+    var icon = document.getElementById('icon-' + cls);
+    var visible = rows.length > 0 && rows[0].style.display !== 'none';
+    rows.forEach(function(r) { r.style.display = visible ? 'none' : 'table-row'; });
+    if (icon) icon.textContent = visible ? '▶' : '▼';
+}
+</script>
+
+<!-- Por jugador -->
+<div class="card">
+    <h2>👤 Cortesías por Jugador (Top consumidores)</h2>
+    <div class="table-wrapper">
+        <table>
+            <thead>
+                <tr>
+                    <th>Cliente</th>
+                    <th>Nivel</th>
+                    <th class="text-right">Cortesías</th>
+                    <th class="text-right">Monto Cortesías</th>
+                    <th class="text-right">Coin In</th>
+                    <th class="text-right">Promo In</th>
+                    <th class="text-right">Total Games</th>
+                    <th class="text-right">% Cortesía/CoinIn</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in resumen %}
+                <tr>
+                    <td>{{ r.nombre_cliente }}</td>
+                    <td><span class="badge badge-info">{{ r.player_level }}</span></td>
+                    <td class="text-right">{{ r.total_cortesias }}</td>
+                    <td class="text-right">${{ "{:,.0f}".format(r.monto_cortesias or 0) }}</td>
+                    <td class="text-right">${{ "{:,.0f}".format(r.total_coin_in or 0) }}</td>
+                    <td class="text-right">${{ "{:,.0f}".format(r.total_promo_in or 0) }}</td>
+                    <td class="text-right">{{ "{:,.0f}".format(r.total_games or 0) }}</td>
+                    <td class="text-right">
+                        <span class="badge {% if r.pct_cortesia_coin_in > 1 %}badge-warn{% else %}badge-good{% endif %}">
+                            {{ "%.3f"|format(r.pct_cortesia_coin_in or 0) }}%
+                        </span>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Por día -->
+<div class="card">
+    <h2>📅 Cortesías por Día</h2>
+    <div class="table-wrapper" style="max-height: 350px;">
+        <table>
+            <thead>
+                <tr>
+                    <th>Fecha</th>
+                    <th class="text-right">Cantidad</th>
+                    <th class="text-right">Monto</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for d in por_dia %}
+                <tr>
+                    <td>{{ d.fecha_jornada }}</td>
+                    <td class="text-right">{{ d.cantidad }}</td>
+                    <td class="text-right">${{ "{:,.0f}".format(d.monto_total or 0) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

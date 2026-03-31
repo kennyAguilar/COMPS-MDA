@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+
+{% block title %}COMPS MDA - Resumen General{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>📋 Resumen General — Cortesías + Premios vs Coin In</h2>
+
+    <form method="get" style="margin-bottom: 1rem; display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+        <label style="color: #aaa;">Filtrar:</label>
+        <select name="anio" style="padding: 6px 12px; border-radius: 6px; background: #1e293b; color: #e2e8f0; border: 1px solid #334155;">
+            <option value="">Año: Todos</option>
+            {% for a in anios %}
+            <option value="{{ a }}" {% if a == anio_actual %}selected{% endif %}>{{ a }}</option>
+            {% endfor %}
+        </select>
+        <select name="mes" style="padding: 6px 12px; border-radius: 6px; background: #1e293b; color: #e2e8f0; border: 1px solid #334155;">
+            <option value="">Mes: Todos</option>
+            {% for m in meses_disp %}
+            <option value="{{ m }}" {% if m == mes_actual %}selected{% endif %}>
+                {{ {'01':'Enero','02':'Febrero','03':'Marzo','04':'Abril','05':'Mayo','06':'Junio','07':'Julio','08':'Agosto','09':'Septiembre','10':'Octubre','11':'Noviembre','12':'Diciembre'}.get(m, m) }}
+            </option>
+            {% endfor %}
+        </select>
+        <button type="submit" style="padding: 6px 18px; border-radius: 6px; background: #2563eb; color: #fff; border: none; cursor: pointer; font-weight: 600;">Aplicar</button>
+        {% if anio_actual or mes_actual %}
+        <a href="{{ request.path }}" style="padding: 6px 14px; border-radius: 6px; background: #334155; color: #94a3b8; text-decoration: none; font-size: 0.85rem;">Limpiar</a>
+        {% endif %}
+    </form>
+
+    <div class="kpi-grid">
+        <div class="kpi">
+            <div class="number">${{ "{:,.0f}".format(kpis.total_coin_in or 0) }}</div>
+            <div class="label">Total Coin In</div>
+        </div>
+        <div class="kpi">
+            <div class="number green">${{ "{:,.0f}".format(kpis.total_promo_in or 0) }}</div>
+            <div class="label">Total Promo In</div>
+        </div>
+        <div class="kpi">
+            <div class="number">{{ "{:,.0f}".format(kpis.total_games or 0) }}</div>
+            <div class="label">Total Games</div>
+        </div>
+        <div class="kpi">
+            <div class="number green">${{ "{:,.0f}".format(kpis.total_cortesias or 0) }}</div>
+            <div class="label">Monto Cortesías</div>
+        </div>
+        <div class="kpi">
+            <div class="number yellow">${{ "{:,.0f}".format(kpis.total_premios or 0) }}</div>
+            <div class="label">Monto Premios</div>
+        </div>
+        <div class="kpi">
+            <div class="number purple">{{ "{:,.0f}".format(kpis.jugadores_srw or 0) }}</div>
+            <div class="label">Jugadores SRW</div>
+        </div>
+        <div class="kpi">
+            <div class="number">{{ "{:,.0f}".format(kpis.clientes_cortesias or 0) }}</div>
+            <div class="label">Con cortesías</div>
+        </div>
+        <div class="kpi">
+            <div class="number">{{ "{:,.0f}".format(kpis.clientes_premios or 0) }}</div>
+            <div class="label">Con premios</div>
+        </div>
+        <div class="kpi">
+            <div class="number {% if kpis.total_coin_in and ((kpis.total_cortesias or 0) + (kpis.total_premios or 0)) / kpis.total_coin_in * 100 > 5 %}red{% else %}green{% endif %}">
+                {% if kpis.total_coin_in %}
+                    {{ "%.3f"|format(((kpis.total_cortesias or 0) + (kpis.total_premios or 0)) / kpis.total_coin_in * 100) }}%
+                {% else %}0%{% endif %}
+            </div>
+            <div class="label">% (Cort+Prem)/CoinIn</div>
+        </div>
+    </div>
+</div>
+
+<!-- Tabla detallada -->
+<div class="card">
+    <h2>👤 Jugadores con Cortesías y/o Premios</h2>
+    <p class="text-muted mb-1">Solo se muestran jugadores que recibieron al menos una cortesía o premio</p>
+    <div class="table-wrapper">
+        <table class="table-compact">
+            <thead>
+                <tr>
+                    <th>Jugador</th>
+                    <th>Nivel</th>
+                    <th class="text-right">Días</th>
+                    <th class="text-right">Coin In</th>
+                    <th class="text-right">Promo In</th>
+                    <th class="text-right">Games</th>
+                    <th class="text-right"># Cortesías</th>
+                    <th class="text-right">$ Cortesías</th>
+                    <th class="text-right"># Premios</th>
+                    <th class="text-right">$ Premios</th>
+                    <th class="text-right">% Total/CoinIn</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for j in jugadores %}
+                <tr>
+                    <td>{{ j.full_name }}</td>
+                    <td><span class="badge badge-info">{{ j.player_level }}</span></td>
+                    <td class="text-right">{{ j.dias_jugados }}</td>
+                    <td class="text-right">${{ "{:,.0f}".format(j.total_coin_in or 0) }}</td>
+                    <td class="text-right">${{ "{:,.0f}".format(j.total_promo_in or 0) }}</td>
+                    <td class="text-right">{{ "{:,.0f}".format(j.total_games or 0) }}</td>
+                    <td class="text-right">{{ j.total_cortesias }}</td>
+                    <td class="text-right">${{ "{:,.0f}".format(j.monto_cortesias or 0) }}</td>
+                    <td class="text-right">{{ j.total_premios }}</td>
+                    <td class="text-right">${{ "{:,.0f}".format(j.monto_premios or 0) }}</td>
+                    <td class="text-right">
+                        <span class="badge {% if j.pct_total_coin_in > 5 %}badge-warn{% elif j.pct_total_coin_in > 1 %}badge-info{% else %}badge-good{% endif %}">
+                            {{ "%.3f"|format(j.pct_total_coin_in or 0) }}%
+                        </span>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
