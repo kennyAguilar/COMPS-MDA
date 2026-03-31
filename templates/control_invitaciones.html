@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}Control de Invitaciones{% endblock %}
+{% block content %}
+<div class="card">
+    <h2>Control de Invitaciones</h2>
+    <p class="text-muted mb-1">Invitación permitida = Coin In × {{ "%.1f"|format(pct_primario * 100) }}% (primario) × % categoría</p>
+    <form method="get" class="mb-1" id="filtros-form">
+        <div style="display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end;">
+            <div>
+                <label for="anio">Año</label><br>
+                <select name="anio" id="anio">
+                    <option value="">Todos</option>
+                    {% for a in anios %}
+                        <option value="{{ a }}" {% if a == anio_actual %}selected{% endif %}>{{ a }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="mes">Mes</label><br>
+                <select name="mes" id="mes">
+                    <option value="">Todos</option>
+                    {% for m in meses_disp %}
+                        <option value="{{ m }}" {% if m == mes_actual %}selected{% endif %}>{{ {'01':'Enero','02':'Febrero','03':'Marzo','04':'Abril','05':'Mayo','06':'Junio','07':'Julio','08':'Agosto','09':'Septiembre','10':'Octubre','11':'Noviembre','12':'Diciembre'}.get(m, m) }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <button class="btn btn-primary" type="submit">Filtrar</button>
+            </div>
+        </div>
+    </form>
+
+    {% if pct_categoria %}
+    <div style="display:flex; flex-wrap:wrap; gap:0.8rem; margin-top:0.5rem;">
+        {% for cat, pct in pct_categoria.items() %}
+        <span class="badge badge-info" style="font-size:0.75rem;">{{ cat }}: {{ "%.1f"|format(pct * 100) }}%</span>
+        {% endfor %}
+        <span class="badge" style="font-size:0.75rem; background:#334155;">Días período: {{ dias_totales }}</span>
+    </div>
+    {% endif %}
+</div>
+
+{% if resultados is not none %}
+<div class="card">
+    {% if resultados|length > 0 %}
+    <p class="text-muted">{{ resultados|length }} cliente{{ 's' if resultados|length != 1 }} con cortesías en el período</p>
+    {% endif %}
+    <div class="table-wrapper">
+        <table class="table-compact" style="table-layout:fixed; width:100%;">
+            <colgroup>
+                <col style="width:28%">
+                <col style="width:7%">
+                <col style="width:5%">
+                <col style="width:5%">
+                <col style="width:5%">
+                <col style="width:9%">
+                <col style="width:10%">
+                <col style="width:10%">
+                <col style="width:10%">
+                <col style="width:11%">
+            </colgroup>
+            <thead>
+                <tr>
+                    <th>Nombre Cliente</th>
+                    <th class="text-center">Nivel</th>
+                    <th class="text-center">Días</th>
+                    <th class="text-center">% Asis.</th>
+                    <th class="text-center">Prem.</th>
+                    <th class="text-right">$ Premios</th>
+                    <th class="text-right">Coin In</th>
+                    <th class="text-right">Invitación Max.</th>
+                    <th class="text-right">Cortesías</th>
+                    <th class="text-right">Saldo Disp.</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in resultados %}
+                <tr>
+                    <td style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="{{ r.nombre }}">{{ r.nombre }}</td>
+                    <td class="text-center" style="font-size:0.7rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="{{ r.nivel }}">{{ r.nivel|replace('DREAMS ','D.')|replace('DREAMS','D.') }}</td>
+                    <td class="text-center">{{ r.dias_asistidos }}</td>
+                    <td class="text-center">{{ r.pct_asistencia }}%</td>
+                    <td class="text-center">{{ r.cant_premios }}</td>
+                    <td class="text-right">{{ "{:,.0f}".format(r.monto_premios) }}</td>
+                    <td class="text-right">{{ "{:,.0f}".format(r.coin_in_mensual) }}</td>
+                    <td class="text-right">{{ "{:,.0f}".format(r.invitacion_mensual) }}</td>
+                    <td class="text-right">{{ "{:,.0f}".format(r.monto_micros) }}</td>
+                    <td class="text-right" style="font-weight:600; color:{{ '#22c55e' if r.saldo >= 0 else '#ef4444' }};">{{ "{:,.0f}".format(r.saldo) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if resultados|length == 0 %}
+        <div class="text-muted mt-1">No hay resultados para los filtros seleccionados.</div>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}

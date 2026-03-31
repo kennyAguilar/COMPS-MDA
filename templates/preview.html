@@ -1,0 +1,214 @@
+{% extends "base.html" %}
+
+{% block title %}Excel Cleaner - Vista previa{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>📋 Vista previa: {{ filename }}</h2>
+
+    <!-- Tabs de hojas -->
+    <div class="tabs">
+        {% for sheet in sheets %}
+        <div class="tab {% if loop.first %}active{% endif %}" data-sheet="{{ sheet }}">
+            {{ sheet }}
+            <span class="badge badge-info">{{ sheet_data[sheet].rows }} filas</span>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Contenido de cada hoja -->
+    {% for sheet in sheets %}
+    <div class="tab-content {% if loop.first %}active{% endif %}" id="sheet-{{ loop.index }}">
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="number">{{ sheet_data[sheet].rows }}</div>
+                <div class="label">Filas</div>
+            </div>
+            <div class="stat-card">
+                <div class="number">{{ sheet_data[sheet].cols }}</div>
+                <div class="label">Columnas</div>
+            </div>
+            <div class="stat-card">
+                <div class="number">{{ sheet_data[sheet].duplicate_rows }}</div>
+                <div class="label">Filas duplicadas</div>
+            </div>
+            <div class="stat-card">
+                <div class="number">
+                    {% set ns = namespace(total=0) %}
+                    {% for col, count in sheet_data[sheet].null_counts.items() %}
+                        {% set ns.total = ns.total + count %}
+                    {% endfor %}
+                    {{ ns.total }}
+                </div>
+                <div class="label">Valores vacíos</div>
+            </div>
+        </div>
+
+        <!-- Detalle columnas -->
+        <details class="mt-1" style="color: #94a3b8; cursor: pointer;">
+            <summary style="font-size: 0.85rem; margin-bottom: 0.5rem;">Ver detalle de columnas</summary>
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Columna</th>
+                            <th>Tipo</th>
+                            <th>Vacíos</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for col in sheet_data[sheet].columns %}
+                        <tr>
+                            <td>{{ col }}</td>
+                            <td><span class="badge badge-info">{{ sheet_data[sheet].dtypes[col] }}</span></td>
+                            <td>
+                                {% if sheet_data[sheet].null_counts[col] > 0 %}
+                                    <span class="badge badge-warn">{{ sheet_data[sheet].null_counts[col] }}</span>
+                                {% else %}
+                                    <span class="badge badge-good">0</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </details>
+
+        <!-- Preview datos -->
+        <div class="table-wrapper mt-1">
+            <table>
+                <thead>
+                    <tr>
+                        {% for col in sheet_data[sheet].columns %}
+                        <th>{{ col }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in sheet_data[sheet].preview %}
+                    <tr>
+                        {% for col in sheet_data[sheet].columns %}
+                        <td>{{ row[col] if row[col] != '' else '—' }}</td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Opciones de limpieza -->
+<div class="card">
+    <h2>🧹 Opciones de limpieza</h2>
+
+    <form action="{{ url_for('clean_file') }}" method="post">
+        <!-- Selección de hojas -->
+        <div style="margin-bottom: 1rem;">
+            <label style="font-size: 0.9rem; color: #94a3b8;">Hojas a limpiar:</label>
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.5rem;">
+                {% for sheet in sheets %}
+                <label class="option-item" style="display: inline-flex; padding: 0.4rem 0.75rem;">
+                    <input type="checkbox" name="sheets" value="{{ sheet }}" checked>
+                    <span>{{ sheet }}</span>
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="options-grid">
+            <div class="option-item">
+                <input type="checkbox" name="remove_empty_rows" id="remove_empty_rows" checked>
+                <div>
+                    <label for="remove_empty_rows">Eliminar filas vacías</label>
+                    <div class="desc">Elimina filas donde todas las celdas están vacías</div>
+                </div>
+            </div>
+
+            <div class="option-item">
+                <input type="checkbox" name="remove_empty_cols" id="remove_empty_cols" checked>
+                <div>
+                    <label for="remove_empty_cols">Eliminar columnas vacías</label>
+                    <div class="desc">Elimina columnas donde todas las celdas están vacías</div>
+                </div>
+            </div>
+
+            <div class="option-item">
+                <input type="checkbox" name="remove_duplicates" id="remove_duplicates" checked>
+                <div>
+                    <label for="remove_duplicates">Eliminar duplicados</label>
+                    <div class="desc">Elimina filas duplicadas, conservando la primera aparición</div>
+                </div>
+            </div>
+
+            <div class="option-item">
+                <input type="checkbox" name="trim_spaces" id="trim_spaces" checked>
+                <div>
+                    <label for="trim_spaces">Recortar espacios</label>
+                    <div class="desc">Elimina espacios al inicio y final de textos</div>
+                </div>
+            </div>
+
+            <div class="option-item">
+                <input type="checkbox" name="standardize_headers" id="standardize_headers">
+                <div>
+                    <label for="standardize_headers">Estandarizar encabezados</label>
+                    <div class="desc">Convierte a minúsculas, reemplaza espacios con _</div>
+                </div>
+            </div>
+
+            <div class="option-item">
+                <input type="checkbox" name="remove_special_chars" id="remove_special_chars">
+                <div>
+                    <label for="remove_special_chars">Eliminar caracteres especiales</label>
+                    <div class="desc">Elimina caracteres no alfanuméricos de textos</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="fill-na-group">
+            <label for="fill_na">Rellenar valores vacíos:</label>
+            <select name="fill_na" id="fill_na" onchange="toggleCustomFill()">
+                <option value="none">No rellenar</option>
+                <option value="zero">Rellenar con 0</option>
+                <option value="empty_string">Rellenar con texto vacío</option>
+                <option value="ffill">Rellenar con valor anterior (forward fill)</option>
+                <option value="bfill">Rellenar con valor siguiente (backward fill)</option>
+                <option value="custom">Valor personalizado...</option>
+            </select>
+            <input type="text" name="fill_na_value" id="fill_na_value"
+                   placeholder="Escribe el valor..." style="margin-top: 0.5rem; display: none;">
+        </div>
+
+        <button type="submit" class="btn btn-success btn-block mt-2">
+            🚀 Limpiar archivo
+        </button>
+    </form>
+</div>
+
+<div class="actions">
+    <a href="{{ url_for('index') }}" class="btn btn-secondary">← Subir otro archivo</a>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Tabs
+    document.querySelectorAll('.tab').forEach((tab, index) => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            tab.classList.add('active');
+            document.querySelectorAll('.tab-content')[index].classList.add('active');
+        });
+    });
+
+    function toggleCustomFill() {
+        const select = document.getElementById('fill_na');
+        const input = document.getElementById('fill_na_value');
+        input.style.display = select.value === 'custom' ? 'block' : 'none';
+    }
+</script>
+{% endblock %}

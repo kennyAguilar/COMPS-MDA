@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}Auditoría Coin In Cero{% endblock %}
+{% block content %}
+<div class="card">
+    <h2>Auditoría Coin In Cero</h2>
+    <form method="get" class="mb-1" id="filtros-form">
+        <div style="display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end;">
+            <div>
+                <label for="anio">Año</label><br>
+                <select name="anio" id="anio">
+                    <option value="">Todos</option>
+                    {% for a in anios %}
+                        <option value="{{ a }}" {% if a == anio_actual %}selected{% endif %}>{{ a }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="mes">Mes</label><br>
+                <select name="mes" id="mes">
+                    <option value="">Todos</option>
+                    {% for m in meses_disp %}
+                        <option value="{{ m }}" {% if m == mes_actual %}selected{% endif %}>{{ {'01':'Enero','02':'Febrero','03':'Marzo','04':'Abril','05':'Mayo','06':'Junio','07':'Julio','08':'Agosto','09':'Septiembre','10':'Octubre','11':'Noviembre','12':'Diciembre'}.get(m, m) }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="area">Área</label><br>
+                <select name="area" id="area" onchange="this.form.submit()">
+                    <option value="">Todas</option>
+                    {% for a in areas %}
+                        <option value="{{ a }}" {% if a == area_actual %}selected{% endif %}>{{ a }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="jefe">Jefe</label><br>
+                <select name="jefe" id="jefe">
+                    <option value="">Todos</option>
+                    {% for j in jefes_disp %}
+                        <option value="{{ j[0] }}" {% if j[0] == jefe_actual %}selected{% endif %}>{{ j[1] }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <button class="btn btn-primary" type="submit">Filtrar</button>
+            </div>
+        </div>
+    </form>
+</div>
+
+{% if resultados is not none %}
+<div class="card">
+    {% if resultados|length > 0 %}
+    <p class="text-muted">{{ resultados|length }} caso{{ 's' if resultados|length != 1 }} — Cortesías entregadas a jugadores sin Coin In en esa jornada</p>
+    {% endif %}
+    <div class="table-wrapper">
+        <table class="table-compact" style="table-layout:fixed; width:100%;">
+            <colgroup>
+                <col style="width:88px">
+                <col style="width:40%">
+                <col style="width:70px">
+                <col style="width:45px">
+                <col style="width:80px">
+                <col style="width:60px">
+                <col style="width:75px">
+                <col style="width:50px">
+                <col style="width:20%">
+            </colgroup>
+            <thead>
+                <tr>
+                    <th>Jornada</th>
+                    <th>Nombre Cliente</th>
+                    <th class="text-right">Coin In</th>
+                    <th class="text-right">Cort.</th>
+                    <th class="text-right">$ Cortesías</th>
+                    <th class="text-center">Premio</th>
+                    <th class="text-right">$ Premios</th>
+                    <th>Área</th>
+                    <th>Autorizó</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in resultados %}
+                <tr>
+                    <td>{{ row.jornada }}</td>
+                    <td style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="ID: {{ row.cliente_id }} — {{ row.nombre_cliente }}">{{ row.nombre_cliente }}</td>
+                    <td class="text-right">{{ "{:,.0f}".format(row.coin_in) }}</td>
+                    <td class="text-right">{{ row.cant_cortesias }}</td>
+                    <td class="text-right">{{ "{:,.0f}".format(row.monto_cortesias) }}</td>
+                    <td class="text-center">{% if row.cant_premios > 0 %}<span class="badge badge-good">Sí ({{ row.cant_premios }})</span>{% else %}<span class="badge badge-warn">No</span>{% endif %}</td>
+                    <td class="text-right">{{ "{:,.0f}".format(row.monto_premios) }}</td>
+                    <td style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ row.jefe_area or '—' }}</td>
+                    <td style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="{{ row.jefe_nombre }}">{{ row.jefe_nombre or '—' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if resultados|length == 0 %}
+        <div class="text-muted mt-1">No hay resultados para los filtros seleccionados.</div>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Filtrado dependiente de jefe según área
+const areaSel = document.getElementById('area');
+const jefeSel = document.getElementById('jefe');
+const jefeOrig = Array.from(jefeSel.options);
+areaSel.addEventListener('change', function() {
+    document.getElementById('filtros-form').submit();
+});
+</script>
+{% endblock %}
