@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}COMPS MDA - Análisis{% endblock %}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            min-height: 100vh;
+        }
+
+        .navbar {
+            background: #1e293b;
+            padding: 0.75rem 2rem;
+            border-bottom: 1px solid #334155;
+            display: flex;
+            align-items: center;
+            gap: 2rem;
+        }
+
+        .navbar .brand {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            text-decoration: none;
+        }
+
+        .navbar .brand h1 {
+            font-size: 1.15rem;
+            color: #38bdf8;
+            font-weight: 700;
+        }
+
+        .navbar .brand .icon { font-size: 1.3rem; }
+
+        .nav-links {
+            display: flex;
+            gap: 0.25rem;
+        }
+
+        .nav-links a {
+            color: #94a3b8;
+            text-decoration: none;
+            padding: 0.5rem 0.85rem;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .nav-links a:hover, .nav-links a.active {
+            background: #334155;
+            color: #38bdf8;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 1.5rem auto;
+            padding: 0 1.5rem;
+        }
+
+        .card {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1.25rem;
+        }
+
+        .card h2 {
+            color: #38bdf8;
+            margin-bottom: 0.75rem;
+            font-size: 1.1rem;
+        }
+
+        .card h3 {
+            color: #94a3b8;
+            margin-bottom: 0.5rem;
+            font-size: 0.95rem;
+        }
+
+        .flash {
+            padding: 0.75rem 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            font-size: 0.9rem;
+        }
+
+        .flash.error { background: #451a2b; border: 1px solid #f43f5e; color: #fda4af; }
+        .flash.success { background: #14352a; border: 1px solid #22c55e; color: #86efac; }
+
+        .btn {
+            display: inline-block;
+            padding: 0.6rem 1.25rem;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s ease;
+            text-decoration: none;
+        }
+
+        .btn-primary { background: #38bdf8; color: #0f172a; }
+        .btn-primary:hover { background: #7dd3fc; }
+        .btn-success { background: #22c55e; color: #0f172a; }
+        .btn-success:hover { background: #4ade80; }
+        .btn-secondary { background: #475569; color: #e2e8f0; }
+        .btn-secondary:hover { background: #64748b; }
+        .btn-danger { background: #ef4444; color: #fff; }
+        .btn-danger:hover { background: #f87171; }
+        .btn-lg { padding: 0.75rem 2rem; font-size: 1rem; }
+
+        /* KPI cards */
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 0.75rem;
+            margin-bottom: 1.25rem;
+        }
+
+        .kpi {
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 10px;
+            padding: 1rem;
+            text-align: center;
+        }
+
+        .kpi .number {
+            font-size: 1.5rem;
+            color: #38bdf8;
+            font-weight: 700;
+            line-height: 1.2;
+        }
+
+        .kpi .number.green { color: #22c55e; }
+        .kpi .number.yellow { color: #fbbf24; }
+        .kpi .number.red { color: #f43f5e; }
+        .kpi .number.purple { color: #a78bfa; }
+
+        .kpi .label {
+            font-size: 0.75rem;
+            color: #64748b;
+            margin-top: 0.3rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* Tables */
+        .table-wrapper {
+            overflow-x: auto;
+            border-radius: 8px;
+            border: 1px solid #334155;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.8rem;
+        }
+
+        th {
+            background: #334155;
+            color: #38bdf8;
+            padding: 0.55rem 0.65rem;
+            text-align: left;
+            white-space: nowrap;
+            position: sticky;
+            top: 0;
+        }
+
+        td {
+            padding: 0.45rem 0.65rem;
+            border-top: 1px solid rgba(51,65,85,0.5);
+            color: #cbd5e1;
+            white-space: nowrap;
+        }
+
+        tr:nth-child(even) { background: rgba(255,255,255,0.015); }
+        tr:hover { background: rgba(56, 189, 248, 0.05); }
+
+        /* Tabla compacta para que quepa en pantalla */
+        .table-compact { font-size: 0.72rem; table-layout: fixed; }
+        .table-compact th, .table-compact td { padding: 0.35rem 0.4rem; }
+        .table-compact th:first-child, .table-compact td:first-child { width: 22%; white-space: normal; word-break: break-word; }
+        .table-compact th:nth-child(2), .table-compact td:nth-child(2) { width: 10%; }
+        .table-compact th:nth-child(n+3), .table-compact td:nth-child(n+3) { width: auto; }
+
+        .text-right { text-align: right; }
+        .text-center { text-align: center; }
+        .text-muted { color: #64748b; }
+
+        .badge {
+            display: inline-block;
+            padding: 0.15rem 0.45rem;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: 600;
+        }
+
+        .badge-info { background: #1e3a5f; color: #38bdf8; }
+        .badge-warn { background: #422006; color: #fbbf24; }
+        .badge-good { background: #14352a; color: #22c55e; }
+        .badge-purple { background: #2e1065; color: #a78bfa; }
+
+        .mt-1 { margin-top: 0.75rem; }
+        .mt-2 { margin-top: 1.5rem; }
+        .mb-1 { margin-bottom: 0.75rem; }
+
+        .actions {
+            display: flex;
+            gap: 0.75rem;
+            margin-top: 1rem;
+            flex-wrap: wrap;
+        }
+
+        /* Chart placeholder */
+        .chart-container {
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-top: 0.75rem;
+            min-height: 200px;
+        }
+
+        /* File list */
+        .file-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 0.75rem;
+        }
+
+        .file-item {
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 1rem;
+        }
+
+        .file-item .name {
+            font-weight: 600;
+            color: #e2e8f0;
+            font-size: 0.85rem;
+            margin-bottom: 0.3rem;
+        }
+
+        .file-item .meta {
+            font-size: 0.75rem;
+            color: #64748b;
+        }
+
+        .file-item .status {
+            margin-top: 0.5rem;
+        }
+
+        /* Responsive table scroll hint */
+        .table-wrapper { max-height: 500px; overflow-y: auto; }
+
+        @media (max-width: 768px) {
+            .navbar { flex-direction: column; gap: 0.5rem; }
+            .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+            .upload-grid { grid-template-columns: 1fr !important; }
+        }
+
+        /* Upload zones */
+        .upload-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        .upload-slot { display: flex; flex-direction: column; gap: 0.5rem; align-items: center; }
+        .drop-zone {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 0.35rem;
+            width: 100%;
+            min-height: 160px;
+            border: 2px dashed #475569;
+            border-radius: 12px;
+            padding: 1.25rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+        }
+        .drop-zone:hover, .drop-zone.drag-over {
+            border-color: #38bdf8;
+            background: rgba(56, 189, 248, 0.06);
+        }
+        .drop-zone.has-file {
+            border-color: #22c55e;
+            background: rgba(34, 197, 94, 0.06);
+        }
+        .drop-icon { font-size: 2rem; }
+        .drop-title { font-weight: 600; font-size: 0.9rem; color: #e2e8f0; }
+        .drop-hint { font-size: 0.75rem; color: #64748b; }
+        .drop-file-name { font-size: 0.8rem; color: #94a3b8; margin-top: 0.25rem; }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <a href="{{ url_for('index') }}" class="brand">
+            <span class="icon">🎰</span>
+            <h1>COMPS MDA</h1>
+        </a>
+        <div class="nav-links">
+            <a href="{{ url_for('index') }}" class="{% if request.endpoint == 'index' %}active{% endif %}">Inicio</a>
+            <a href="{{ url_for('analisis_cortesias') }}" class="{% if request.endpoint == 'analisis_cortesias' %}active{% endif %}">Cortesías</a>
+            <a href="{{ url_for('analisis_premios') }}" class="{% if request.endpoint == 'analisis_premios' %}active{% endif %}">Premios</a>
+            <a href="{{ url_for('analisis_resumen') }}" class="{% if request.endpoint == 'analisis_resumen' %}active{% endif %}">Resumen</a>
+            <a href="{{ url_for('control_invitaciones') }}" class="{% if request.endpoint == 'control_invitaciones' %}active{% endif %}">Control Inv.</a>
+            <a href="{{ url_for('auditoria_coinin_cero') }}" class="{% if request.endpoint == 'auditoria_coinin_cero' %}active{% endif %}">Auditoría</a>
+            <a href="{{ url_for('exportar_reportes') }}" class="{% if request.endpoint == 'exportar_reportes' %}active{% endif %}">Exportar</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="flash {{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </div>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>

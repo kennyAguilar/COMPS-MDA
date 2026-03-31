@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Exportar Reportes{% endblock %}
+{% block content %}
+<div class="card">
+    <h2>📥 Exportar Reportes a Excel</h2>
+    <p class="text-muted mb-1">Selecciona el período y las secciones que deseas exportar. Se generará un archivo Excel con una hoja por cada sección.</p>
+
+    <form method="post" action="{{ url_for('exportar_generar') }}">
+        <div style="display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end; margin-bottom: 1.5rem;">
+            <div>
+                <label for="anio">Año</label><br>
+                <select name="anio" id="anio">
+                    <option value="">Todos</option>
+                    {% for a in anios %}
+                        <option value="{{ a }}">{{ a }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="mes">Mes</label><br>
+                <select name="mes" id="mes">
+                    <option value="">Todos</option>
+                    {% for m in meses_disp %}
+                        <option value="{{ m }}">{{ {'01':'Enero','02':'Febrero','03':'Marzo','04':'Abril','05':'Mayo','06':'Junio','07':'Julio','08':'Agosto','09':'Septiembre','10':'Octubre','11':'Noviembre','12':'Diciembre'}.get(m, m) }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+
+        <div style="margin-bottom: 1.5rem;">
+            <label style="font-weight:600; margin-bottom:0.5rem; display:block;">Secciones a exportar</label>
+            <div style="display: flex; flex-wrap: wrap; gap: 1rem;">
+                <label class="checkbox-card">
+                    <input type="checkbox" name="secciones" value="cortesias" checked>
+                    <span class="checkbox-label">🍽️ Cortesías</span>
+                    <span class="checkbox-desc">Cortesías por jugador con coin-in</span>
+                </label>
+                <label class="checkbox-card">
+                    <input type="checkbox" name="secciones" value="premios" checked>
+                    <span class="checkbox-label">🏆 Premios</span>
+                    <span class="checkbox-desc">Premios por jugador con montos</span>
+                </label>
+                <label class="checkbox-card">
+                    <input type="checkbox" name="secciones" value="resumen" checked>
+                    <span class="checkbox-label">📊 Resumen</span>
+                    <span class="checkbox-desc">Jugadores con cortesías + premios</span>
+                </label>
+                <label class="checkbox-card">
+                    <input type="checkbox" name="secciones" value="control_invitaciones" checked>
+                    <span class="checkbox-label">📋 Control Invitaciones</span>
+                    <span class="checkbox-desc">Tope invitaciones vs consumido</span>
+                </label>
+                <label class="checkbox-card">
+                    <input type="checkbox" name="secciones" value="auditoria_coinin_cero" checked>
+                    <span class="checkbox-label">🔍 Auditoría Coin In Cero</span>
+                    <span class="checkbox-desc">Cortesías sin actividad de juego</span>
+                </label>
+            </div>
+        </div>
+
+        <div style="display:flex; gap:1rem; align-items:center;">
+            <button type="submit" class="btn btn-primary btn-lg">📥 Generar Excel</button>
+            <button type="button" onclick="document.querySelectorAll('input[name=secciones]').forEach(c=>c.checked=true)" class="btn" style="background:#334155;">Seleccionar todas</button>
+            <button type="button" onclick="document.querySelectorAll('input[name=secciones]').forEach(c=>c.checked=false)" class="btn" style="background:#334155;">Deseleccionar</button>
+        </div>
+    </form>
+</div>
+
+<style>
+.checkbox-card {
+    display: flex;
+    flex-direction: column;
+    padding: 0.8rem 1.2rem;
+    border: 2px solid #334155;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    min-width: 180px;
+    flex: 1;
+}
+.checkbox-card:hover {
+    border-color: #2563eb;
+}
+.checkbox-card:has(input:checked) {
+    border-color: #2563eb;
+    background: rgba(37, 99, 235, 0.1);
+}
+.checkbox-card input {
+    margin-bottom: 0.4rem;
+}
+.checkbox-label {
+    font-weight: 600;
+    font-size: 0.95rem;
+}
+.checkbox-desc {
+    font-size: 0.75rem;
+    color: #94a3b8;
+    margin-top: 0.2rem;
+}
+</style>
+{% endblock %}

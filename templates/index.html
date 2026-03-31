@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+
+{% block title %}COMPS MDA - Inicio{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>🎰 Panel de Control - Dreams Punta Arenas</h2>
+    <p class="text-muted mb-1">Análisis mensual de cortesías y premios</p>
+
+    <div class="kpi-grid">
+        <div class="kpi">
+            <div class="number">{{ "{:,.0f}".format(stats.get('srw_jugadores', 0)) }}</div>
+            <div class="label">Registros SRW</div>
+        </div>
+        <div class="kpi">
+            <div class="number green">{{ "{:,.0f}".format(stats.get('cortesias', 0)) }}</div>
+            <div class="label">Cortesías</div>
+        </div>
+        <div class="kpi">
+            <div class="number yellow">{{ "{:,.0f}".format(stats.get('premios', 0)) }}</div>
+            <div class="label">Premios</div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <h2>📂 Cargar archivos del mes</h2>
+    <form action="{{ url_for('cargar_datos') }}" method="post" enctype="multipart/form-data" id="uploadForm">
+        <div class="upload-grid">
+            <div class="upload-slot" id="slot-srw">
+                <label class="drop-zone" for="archivo_srw">
+                    <div class="drop-icon">📊</div>
+                    <div class="drop-title">SRW — Actividad Jugadores</div>
+                    <div class="drop-hint">Coin In, Coin Out, Jackpots, Win/Loss</div>
+                    <div class="drop-file-name" id="name-srw">Arrastra o haz clic para seleccionar .xls / .xlsx</div>
+                    <input type="file" name="archivo_srw" id="archivo_srw" accept=".xls,.xlsx" hidden>
+                </label>
+                {% if stats.get('srw_jugadores', 0) > 0 %}
+                <span class="badge badge-good">{{ "{:,.0f}".format(stats.srw_jugadores) }} registros cargados</span>
+                {% endif %}
+            </div>
+            <div class="upload-slot" id="slot-cortesias">
+                <label class="drop-zone" for="archivo_cortesias">
+                    <div class="drop-icon">🍽️</div>
+                    <div class="drop-title">Informe Cortesías</div>
+                    <div class="drop-hint">RrtInformeGeneral — Vouchers complementarios</div>
+                    <div class="drop-file-name" id="name-cortesias">Arrastra o haz clic para seleccionar .xls / .xlsx</div>
+                    <input type="file" name="archivo_cortesias" id="archivo_cortesias" accept=".xls,.xlsx" hidden>
+                </label>
+                {% if stats.get('cortesias', 0) > 0 %}
+                <span class="badge badge-good">{{ "{:,.0f}".format(stats.cortesias) }} registros cargados</span>
+                {% endif %}
+            </div>
+            <div class="upload-slot" id="slot-premios">
+                <label class="drop-zone" for="archivo_premios">
+                    <div class="drop-icon">🏆</div>
+                    <div class="drop-title">SGOS — Premios</div>
+                    <div class="drop-hint">Pagos de premios (Jackpots, MDC Purse Clear, etc.)</div>
+                    <div class="drop-file-name" id="name-premios">Arrastra o haz clic para seleccionar .xls / .xlsx</div>
+                    <input type="file" name="archivo_premios" id="archivo_premios" accept=".xls,.xlsx" hidden>
+                </label>
+                {% if stats.get('premios', 0) > 0 %}
+                <span class="badge badge-good">{{ "{:,.0f}".format(stats.premios) }} registros cargados</span>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="actions">
+            <button type="submit" class="btn btn-primary btn-lg" id="btnCargar" disabled>
+                🔄 Cargar datos seleccionados
+            </button>
+        </div>
+    </form>
+</div>
+
+{% if log %}
+<div class="card">
+    <h2>📋 Historial de cargas</h2>
+    <div class="table-wrapper">
+        <table>
+            <thead>
+                <tr>
+                    <th>Tabla</th>
+                    <th>Archivo</th>
+                    <th class="text-right">Filas</th>
+                    <th>Fecha carga</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for entry in log %}
+                <tr>
+                    <td><span class="badge badge-info">{{ entry.tabla }}</span></td>
+                    <td>{{ entry.archivo }}</td>
+                    <td class="text-right">{{ "{:,.0f}".format(entry.filas) }}</td>
+                    <td>{{ entry.fecha_carga[:19] }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+{% if stats.get('srw_jugadores', 0) > 0 %}
+<div class="card text-center">
+    <h2>📊 Ir al análisis</h2>
+    <div class="actions" style="justify-content: center;">
+        <a href="{{ url_for('analisis_cortesias') }}" class="btn btn-success">🍽️ Cortesías vs Coin In</a>
+        <a href="{{ url_for('analisis_premios') }}" class="btn btn-primary">🏆 Entregas de Premios</a>
+        <a href="{{ url_for('analisis_resumen') }}" class="btn btn-secondary">📋 Resumen General</a>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const inputs = document.querySelectorAll('input[type="file"]');
+    const btn = document.getElementById('btnCargar');
+
+    function updateButton() {
+        const hasFile = Array.from(inputs).some(i => i.files.length > 0);
+        btn.disabled = !hasFile;
+    }
+
+    inputs.forEach(input => {
+        const slotId = input.id.replace('archivo_', '');
+        const nameEl = document.getElementById('name-' + slotId);
+        const zone = input.closest('.drop-zone');
+
+        input.addEventListener('change', function() {
+            if (this.files.length > 0) {
+                nameEl.textContent = '✅ ' + this.files[0].name;
+                zone.classList.add('has-file');
+            } else {
+                nameEl.textContent = 'Arrastra o haz clic para seleccionar .xls / .xlsx';
+                zone.classList.remove('has-file');
+            }
+            updateButton();
+        });
+
+        zone.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            zone.classList.add('drag-over');
+        });
+        zone.addEventListener('dragleave', function() {
+            zone.classList.remove('drag-over');
+        });
+        zone.addEventListener('drop', function(e) {
+            e.preventDefault();
+            zone.classList.remove('drag-over');
+            if (e.dataTransfer.files.length > 0) {
+                input.files = e.dataTransfer.files;
+                input.dispatchEvent(new Event('change'));
+            }
+        });
+    });
+
+    // Disable button while uploading
+    document.getElementById('uploadForm').addEventListener('submit', function() {
+        btn.disabled = true;
+        btn.textContent = '⏳ Procesando archivos...';
+    });
+});
+</script>
+{% endblock %}
