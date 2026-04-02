@@ -20,6 +20,10 @@
             <div class="number yellow">{{ "{:,.0f}".format(stats.get('premios', 0)) }}</div>
             <div class="label">Premios</div>
         </div>
+        <div class="kpi">
+            <div class="number" style="color: #ff6b9d;">{{ "{:,.0f}".format(stats.get('mesas_puntos', 0)) }}</div>
+            <div class="label">Mesas Puntos</div>
+        </div>
     </div>
 </div>
 
@@ -61,6 +65,18 @@
                 </label>
                 {% if stats.get('premios', 0) > 0 %}
                 <span class="badge badge-good">{{ "{:,.0f}".format(stats.premios) }} registros cargados</span>
+                {% endif %}
+            </div>
+            <div class="upload-slot" id="slot-mesas_puntos">
+                <label class="drop-zone" for="archivo_mesas_puntos">
+                    <div class="drop-icon">🎲</div>
+                    <div class="drop-title">Mesas — Puntos Clientes</div>
+                    <div class="drop-hint">Rpt_Mesas_Puntos_ClientesSe — Puntos y Coin In Puntos</div>
+                    <div class="drop-file-name" id="name-mesas_puntos">Arrastra o haz clic para seleccionar .xls / .xlsx</div>
+                    <input type="file" name="archivo_mesas_puntos" id="archivo_mesas_puntos" accept=".xls,.xlsx" hidden>
+                </label>
+                {% if stats.get('mesas_puntos', 0) > 0 %}
+                <span class="badge badge-good">{{ "{:,.0f}".format(stats.mesas_puntos) }} registros cargados</span>
                 {% endif %}
             </div>
         </div>
