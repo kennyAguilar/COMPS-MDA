@@ -1130,13 +1130,14 @@ def exportar_generar():
         if 'cortesias' in secciones:
             cw, cp = build_date_filter('c.fecha_jornada', anio, mes)
             sw, sp = build_date_filter('gaming_date', anio, mes)
+            mw_exp, mp_exp = build_date_filter('m.fecha_operacion', anio, mes)
             rows = db.execute(f"""
                 SELECT c.cliente_id as ID, c.nombre_cliente as Nombre,
                        COUNT(c.id) as Cortesias, SUM(c.micros) as Monto_Cortesias,
-                       COALESCE(s.total_coin_in, 0) as Coin_In,
+                       COALESCE(s.total_coin_in, 0) + COALESCE(m.coin_in_mesas, 0) as Coin_In,
                        COALESCE(s.player_level, '-') as Nivel,
-                       CASE WHEN COALESCE(s.total_coin_in, 0) > 0
-                            THEN ROUND(SUM(c.micros) * 100.0 / s.total_coin_in, 4)
+                       CASE WHEN (COALESCE(s.total_coin_in, 0) + COALESCE(m.coin_in_mesas, 0)) > 0
+                            THEN ROUND(SUM(c.micros) * 100.0 / (COALESCE(s.total_coin_in, 0) + COALESCE(m.coin_in_mesas, 0)), 4)
                             ELSE 0 END as Pct_Cortesia_CoinIn
                 FROM cortesias c
                 LEFT JOIN (
@@ -1144,10 +1145,14 @@ def exportar_generar():
                            MAX(player_level) as player_level
                     FROM srw_jugadores {sw} GROUP BY player_id
                 ) s ON c.cliente_id = s.player_id
+                LEFT JOIN (
+                    SELECT cliente_id, SUM(coin_in_puntos) as coin_in_mesas
+                    FROM mesas_puntos m {mw_exp} GROUP BY cliente_id
+                ) m ON c.cliente_id = m.cliente_id
                 {cw}
                 GROUP BY c.cliente_id, c.nombre_cliente
                 ORDER BY Monto_Cortesias DESC
-            """, sp + cp).fetchall()
+            """, sp + mp_exp + cp).fetchall()
             df = pd.DataFrame([dict(r) for r in rows])
             if not df.empty:
                 df.to_excel(writer, sheet_name='Cortesias', index=False)
@@ -1155,13 +1160,14 @@ def exportar_generar():
         if 'premios' in secciones:
             pw, pp = build_date_filter('p.fecha_jornada', anio, mes)
             sw, sp = build_date_filter('gaming_date', anio, mes)
+            mw_exp, mp_exp = build_date_filter('m.fecha_operacion', anio, mes)
             rows = db.execute(f"""
                 SELECT p.cliente_id as ID,
-                       COALESCE(s.full_name, '(Sin nombre)') as Nombre,
+                       COALESCE(s.full_name, m.cliente_nombre, '(Sin nombre)') as Nombre,
                        COALESCE(s.player_level, '-') as Nivel,
                        COUNT(p.id) as Total_Premios,
                        SUM(p.transferencia_final) as Monto_Premios,
-                       COALESCE(s.total_coin_in, 0) as Coin_In
+                       COALESCE(s.total_coin_in, 0) + COALESCE(m.coin_in_mesas, 0) as Coin_In
                 FROM premios p
                 LEFT JOIN (
                     SELECT player_id, MAX(full_name) as full_name,
@@ -1169,10 +1175,15 @@ def exportar_generar():
                            SUM(coin_in) as total_coin_in
                     FROM srw_jugadores {sw} GROUP BY player_id
                 ) s ON p.cliente_id = s.player_id
+                LEFT JOIN (
+                    SELECT cliente_id, MAX(cliente_nombre) as cliente_nombre,
+                           SUM(coin_in_puntos) as coin_in_mesas
+                    FROM mesas_puntos m {mw_exp} GROUP BY cliente_id
+                ) m ON p.cliente_id = m.cliente_id
                 {pw}
                 GROUP BY p.cliente_id
                 ORDER BY Monto_Premios DESC
-            """, sp + pp).fetchall()
+            """, sp + mp_exp + pp).fetchall()
             df = pd.DataFrame([dict(r) for r in rows])
             if not df.empty:
                 df.to_excel(writer, sheet_name='Premios', index=False)
@@ -1181,16 +1192,18 @@ def exportar_generar():
             sw, sp = build_date_filter('gaming_date', anio, mes)
             cw, cparam = build_date_filter('fecha_jornada', anio, mes)
             pw, pparam = build_date_filter('fecha_jornada', anio, mes)
+            mw_res, mp_res = build_date_filter('m.fecha_operacion', anio, mes)
             rows = db.execute(f"""
                 SELECT s.player_id as ID, s.full_name as Nombre, s.player_level as Nivel,
-                       s.total_coin_in as Coin_In, s.total_promo_in as Promo_In,
+                       s.total_coin_in + COALESCE(m.coin_in_mesas, 0) as Coin_In,
+                       s.total_promo_in as Promo_In,
                        s.total_games as Juegos, s.dias_jugados as Dias,
                        COALESCE(c.total_cortesias, 0) as Cortesias,
                        COALESCE(c.monto_cortesias, 0) as Monto_Cortesias,
                        COALESCE(p.total_premios, 0) as Premios,
                        COALESCE(p.monto_premios, 0) as Monto_Premios,
-                       CASE WHEN s.total_coin_in > 0
-                            THEN ROUND((COALESCE(c.monto_cortesias,0) + COALESCE(p.monto_premios,0)) * 100.0 / s.total_coin_in, 4)
+                       CASE WHEN (s.total_coin_in + COALESCE(m.coin_in_mesas, 0)) > 0
+                            THEN ROUND((COALESCE(c.monto_cortesias,0) + COALESCE(p.monto_premios,0)) * 100.0 / (s.total_coin_in + COALESCE(m.coin_in_mesas, 0)), 4)
                             ELSE 0 END as Pct_Total_CoinIn
                 FROM (
                     SELECT player_id, MAX(full_name) as full_name, MAX(player_level) as player_level,
@@ -1206,9 +1219,13 @@ def exportar_generar():
                     SELECT cliente_id, COUNT(*) as total_premios, SUM(transferencia_final) as monto_premios
                     FROM premios {pw} GROUP BY cliente_id
                 ) p ON s.player_id = p.cliente_id
+                LEFT JOIN (
+                    SELECT cliente_id, SUM(coin_in_puntos) as coin_in_mesas
+                    FROM mesas_puntos m {mw_res} GROUP BY cliente_id
+                ) m ON s.player_id = m.cliente_id
                 WHERE COALESCE(c.total_cortesias, 0) > 0 OR COALESCE(p.total_premios, 0) > 0
-                ORDER BY s.total_coin_in DESC
-            """, sp + cparam + pparam).fetchall()
+                ORDER BY Coin_In DESC
+            """, sp + cparam + pparam + mp_res).fetchall()
             df = pd.DataFrame([dict(r) for r in rows])
             if not df.empty:
                 df.to_excel(writer, sheet_name='Resumen', index=False)
@@ -1216,28 +1233,107 @@ def exportar_generar():
         if 'control_invitaciones' in secciones:
             sw, sp = build_date_filter('s.gaming_date', anio, mes)
             cw, cparam = build_date_filter('c.fecha_jornada', anio, mes)
+            ctw, ctparam = build_date_filter('ct.fecha_jornada', anio, mes)
             pw, pparam = build_date_filter('p.fecha_jornada', anio, mes)
             sw_solo, sp_solo = build_date_filter('gaming_date', anio, mes)
-            dias_t = db.execute(f"SELECT COUNT(DISTINCT gaming_date) as d FROM srw_jugadores {sw_solo}", sp_solo).fetchone()['d'] or 1
+            mw_solo_exp, mp_solo_exp = build_date_filter('fecha_operacion', anio, mes)
+            mw_exp, mp_exp = build_date_filter('m.fecha_operacion', anio, mes)
+            mw_exp_inner, mp_exp_inner = build_date_filter('mp.fecha_operacion', anio, mes)
+
+            dias_t = db.execute(f"""
+                SELECT COUNT(DISTINCT fecha) as d FROM (
+                    SELECT gaming_date as fecha FROM srw_jugadores {sw_solo}
+                    UNION
+                    SELECT fecha_operacion as fecha FROM mesas_puntos {mw_solo_exp}
+                )
+            """, sp_solo + mp_solo_exp).fetchone()['d'] or 1
             prim = db.execute("SELECT porcentaje FROM categorias_nivel WHERE categoria = 'Primario'").fetchone()
             pct_prim = prim['porcentaje'] if prim else 0
             cat_map = {r['categoria']: r['porcentaje'] for r in db.execute("SELECT categoria, porcentaje FROM categorias_nivel WHERE categoria != 'Primario'").fetchall()}
 
-            rows = db.execute(f"""
+            # Jugadores SRW agrupados por cliente + jefatura
+            sw_plain, sp_plain = build_date_filter('gaming_date', anio, mes)
+            mw_plain, mp_plain = build_date_filter('fecha_operacion', anio, mes)
+            rows_srw = db.execute(f"""
                 SELECT s.player_id, MAX(s.full_name) as nombre, MAX(s.player_level) as nivel,
-                       SUM(s.coin_in) as coin_in, COUNT(DISTINCT s.gaming_date) as dias,
+                       SUM(s.coin_in) + COALESCE(MAX(m.coin_in_mesas), 0) as coin_in,
+                       COALESCE(d.dias_combinados, COUNT(DISTINCT s.gaming_date)) as dias,
                        COALESCE(c.monto_micros, 0) as micros,
                        COALESCE(c.total_cortesias, 0) as cortesias,
                        COALESCE(p.cant_premios, 0) as premios,
-                       COALESCE(p.monto_premios, 0) as monto_premios
+                       COALESCE(p.monto_premios, 0) as monto_premios,
+                       COALESCE(c.jefe_nombre, '') as jefe,
+                       COALESCE(c.jefe_area, '') as area
                 FROM srw_jugadores s
-                LEFT JOIN (SELECT cliente_id, COUNT(*) as total_cortesias, SUM(micros) as monto_micros FROM cortesias c {cw} GROUP BY cliente_id) c ON s.player_id = c.cliente_id
+                LEFT JOIN (
+                    SELECT ct.cliente_id, ct.usuario_id,
+                           COUNT(*) as total_cortesias,
+                           SUM(ct.micros) as monto_micros,
+                           COALESCE(j.nombre, '') as jefe_nombre,
+                           COALESCE(j.area, '') as jefe_area
+                    FROM cortesias ct
+                    LEFT JOIN jefaturas j ON ct.usuario_id = j.usuario_id
+                    {ctw}
+                    GROUP BY ct.cliente_id, ct.usuario_id
+                ) c ON s.player_id = c.cliente_id
                 LEFT JOIN (SELECT cliente_id, COUNT(*) as cant_premios, SUM(transferencia_final) as monto_premios FROM premios p {pw} GROUP BY cliente_id) p ON s.player_id = p.cliente_id
-                {sw} GROUP BY s.player_id HAVING COALESCE(c.total_cortesias, 0) > 0
+                LEFT JOIN (SELECT cliente_id, SUM(coin_in_puntos) as coin_in_mesas FROM mesas_puntos m {mw_exp} GROUP BY cliente_id) m ON s.player_id = m.cliente_id
+                LEFT JOIN (
+                    SELECT cliente_id, COUNT(DISTINCT fecha) as dias_combinados FROM (
+                        SELECT player_id as cliente_id, gaming_date as fecha FROM srw_jugadores {sw_plain}
+                        UNION
+                        SELECT cliente_id, fecha_operacion as fecha FROM mesas_puntos {mw_plain}
+                    ) GROUP BY cliente_id
+                ) d ON s.player_id = d.cliente_id
+                {sw} GROUP BY s.player_id, c.usuario_id HAVING COALESCE(c.total_cortesias, 0) > 0
                 ORDER BY coin_in DESC
-            """, cparam + pparam + sp).fetchall()
+            """, ctparam + pparam + mp_exp + sp_plain + mp_plain + sp).fetchall()
+
+            # Jugadores solo-mesas (no en SRW) agrupados por cliente + jefatura
+            sw_excl, sp_excl = build_date_filter('gaming_date', anio, mes)
+            mesas_excl = f"mp.cliente_id NOT IN (SELECT DISTINCT player_id FROM srw_jugadores {sw_excl})"
+            if mp_exp_inner:
+                mw_conds = []
+                if anio:
+                    mw_conds.append("SUBSTR(mp.fecha_operacion, 1, 4) = ?")
+                if mes:
+                    mw_conds.append("SUBSTR(mp.fecha_operacion, 6, 2) = ?")
+                mesas_where = "WHERE " + " AND ".join(mw_conds) + " AND " + mesas_excl
+            else:
+                mesas_where = "WHERE " + mesas_excl
+
+            rows_mesas = db.execute(f"""
+                SELECT mp.cliente_id as player_id, MAX(mp.cliente_nombre) as nombre,
+                       'MDJ' as nivel,
+                       SUM(mp.coin_in_puntos) as coin_in,
+                       COUNT(DISTINCT mp.fecha_operacion) as dias,
+                       COALESCE(c.monto_micros, 0) as micros,
+                       COALESCE(c.total_cortesias, 0) as cortesias,
+                       COALESCE(p.cant_premios, 0) as premios,
+                       COALESCE(p.monto_premios, 0) as monto_premios,
+                       COALESCE(c.jefe_nombre, '') as jefe,
+                       COALESCE(c.jefe_area, '') as area
+                FROM mesas_puntos mp
+                LEFT JOIN (
+                    SELECT ct.cliente_id, ct.usuario_id,
+                           COUNT(*) as total_cortesias,
+                           SUM(ct.micros) as monto_micros,
+                           COALESCE(j.nombre, '') as jefe_nombre,
+                           COALESCE(j.area, '') as jefe_area
+                    FROM cortesias ct
+                    LEFT JOIN jefaturas j ON ct.usuario_id = j.usuario_id
+                    {ctw}
+                    GROUP BY ct.cliente_id, ct.usuario_id
+                ) c ON mp.cliente_id = c.cliente_id
+                LEFT JOIN (SELECT cliente_id, COUNT(*) as cant_premios, SUM(transferencia_final) as monto_premios FROM premios p {pw} GROUP BY cliente_id) p ON mp.cliente_id = p.cliente_id
+                {mesas_where}
+                GROUP BY mp.cliente_id, c.usuario_id HAVING COALESCE(c.total_cortesias, 0) > 0
+                ORDER BY coin_in DESC
+            """, ctparam + pparam + mp_exp_inner + sp_excl).fetchall()
+
+            all_rows = list(rows_srw) + list(rows_mesas)
             data = []
-            for r in rows:
+            for r in all_rows:
                 ci = r['coin_in'] or 0
                 pc = cat_map.get(r['nivel'] or '', 0)
                 inv = ci * pct_prim * pc
@@ -1247,7 +1343,9 @@ def exportar_generar():
                     'Dias': r['dias'], 'Pct_Asistencia': round(r['dias'] * 100.0 / dias_t, 1),
                     'Premios': r['premios'], 'Monto_Premios': r['monto_premios'] or 0,
                     'Coin_In': ci, 'Invitacion_Max': round(inv),
-                    'Cortesias_Monto': mic, 'Saldo': round(inv - mic)
+                    'Cortesias_Cant': r['cortesias'],
+                    'Cortesias_Monto': mic, 'Saldo': round(inv - mic),
+                    'Area': r['area'], 'Autorizo': r['jefe']
                 })
             df = pd.DataFrame(data)
             if not df.empty:
@@ -1262,21 +1360,23 @@ def exportar_generar():
                 all_params.extend(cp)
             where_parts.append("""(
                 NOT EXISTS (SELECT 1 FROM srw_jugadores s WHERE s.player_id = c.cliente_id AND s.gaming_date = c.fecha_jornada AND s.coin_in > 0)
+                AND NOT EXISTS (SELECT 1 FROM mesas_puntos m WHERE m.cliente_id = c.cliente_id AND m.fecha_operacion = c.fecha_jornada AND m.coin_in_puntos > 0)
             )""")
             wc = 'WHERE ' + ' AND '.join(where_parts)
             rows = db.execute(f"""
-                SELECT c.fecha_jornada as Jornada, c.nombre_cliente as Nombre,
-                       COALESCE(sv.coin_in_dia, 0) as Coin_In,
+                SELECT c.fecha_jornada as Jornada, c.cliente_id as ID, c.nombre_cliente as Nombre,
+                       COALESCE(sv.coin_in_dia, 0) + COALESCE(me.coin_in_mesas, 0) as Coin_In,
                        COUNT(c.id) as Cortesias, SUM(c.micros) as Monto_Cortesias,
                        COALESCE(p.cant_premios, 0) as Premios,
                        COALESCE(p.monto_premios, 0) as Monto_Premios,
                        COALESCE(j.area, '') as Area, COALESCE(j.nombre, '') as Autorizo
                 FROM cortesias c
                 LEFT JOIN (SELECT player_id, gaming_date, SUM(coin_in) as coin_in_dia FROM srw_jugadores GROUP BY player_id, gaming_date) sv ON c.cliente_id = sv.player_id AND c.fecha_jornada = sv.gaming_date
+                LEFT JOIN (SELECT cliente_id, fecha_operacion, SUM(coin_in_puntos) as coin_in_mesas FROM mesas_puntos GROUP BY cliente_id, fecha_operacion) me ON c.cliente_id = me.cliente_id AND c.fecha_jornada = me.fecha_operacion
                 LEFT JOIN (SELECT cliente_id, fecha_jornada, COUNT(*) as cant_premios, SUM(transferencia_final) as monto_premios FROM premios GROUP BY cliente_id, fecha_jornada) p ON c.cliente_id = p.cliente_id AND c.fecha_jornada = p.fecha_jornada
                 LEFT JOIN jefaturas j ON c.usuario_id = j.usuario_id
                 {wc}
-                GROUP BY c.fecha_jornada, c.cliente_id
+                GROUP BY c.fecha_jornada, c.cliente_id, c.usuario_id
                 ORDER BY c.fecha_jornada DESC
             """, all_params).fetchall()
             df = pd.DataFrame([dict(r) for r in rows])
