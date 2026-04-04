@@ -163,14 +163,18 @@ function toggleProds(cls) {
                     <th>Fecha</th>
                     <th class="text-right">Cantidad</th>
                     <th class="text-right">Monto</th>
+                    <th class="text-right">Coin In MDA</th>
+                    <th class="text-right">Coin In MDY</th>
                 </tr>
             </thead>
             <tbody>
                 {% for d in por_dia %}
                 <tr>
-                    <td>{{ d.fecha_jornada }}</td>
+                    <td>{{ d.fecha_jornada }} <span style="color: #64748b; font-size: 0.85em;">({{ d.dia_semana }})</span></td>
                     <td class="text-right">{{ d.cantidad }}</td>
                     <td class="text-right">${{ "{:,.0f}".format(d.monto_total or 0) }}</td>
+                    <td class="text-right" style="color: #38bdf8;">${{ "{:,.0f}".format(d.coin_in_mda or 0) }}</td>
+                    <td class="text-right" style="color: #a78bfa;">${{ "{:,.0f}".format(d.coin_in_mdy or 0) }}</td>
                 </tr>
                 {% endfor %}
             </tbody>

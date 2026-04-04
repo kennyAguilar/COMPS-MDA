@@ -77,20 +77,19 @@
     <h2>👤 Jugadores con Cortesías y/o Premios</h2>
     <p class="text-muted mb-1">Solo se muestran jugadores que recibieron al menos una cortesía o premio</p>
     <div class="table-wrapper">
-        <table class="table-compact">
+        <table class="table-compact" id="tabla-resumen-jugadores">
             <thead>
                 <tr>
-                    <th>Jugador</th>
-                    <th>Nivel</th>
-                    <th class="text-right">Días</th>
-                    <th class="text-right">Coin In</th>
-                    <th class="text-right">Promo In</th>
-                    <th class="text-right">Games</th>
-                    <th class="text-right"># Cortesías</th>
-                    <th class="text-right">$ Cortesías</th>
-                    <th class="text-right"># Premios</th>
-                    <th class="text-right">$ Premios</th>
-                    <th class="text-right">% Total/CoinIn</th>
+                    <th style="cursor:pointer;" onclick="sortResumen(0,'text')">Jugador <span class="sort-arrow" id="rs-0"></span></th>
+                    <th style="cursor:pointer;" onclick="sortResumen(1,'text')">Nivel <span class="sort-arrow" id="rs-1"></span></th>
+                    <th class="text-right" style="cursor:pointer;" onclick="sortResumen(2,'num')">Días <span class="sort-arrow" id="rs-2"></span></th>
+                    <th class="text-right" style="cursor:pointer;" onclick="sortResumen(3,'num')">Coin In <span class="sort-arrow" id="rs-3"></span></th>
+                    <th class="text-right" style="cursor:pointer;" onclick="sortResumen(4,'num')">Promo In <span class="sort-arrow" id="rs-4"></span></th>
+                    <th class="text-right" style="cursor:pointer;" onclick="sortResumen(5,'num')">Games <span class="sort-arrow" id="rs-5"></span></th>
+                    <th class="text-right" style="cursor:pointer;" onclick="sortResumen(6,'num')"># Cortesías <span class="sort-arrow" id="rs-6"></span></th>
+                    <th class="text-right" style="cursor:pointer;" onclick="sortResumen(7,'num')">$ Cortesías <span class="sort-arrow" id="rs-7"></span></th>
+                    <th class="text-right" style="cursor:pointer;" onclick="sortResumen(8,'num')"># Premios <span class="sort-arrow" id="rs-8"></span></th>
+                    <th class="text-right" style="cursor:pointer;" onclick="sortResumen(9,'num')">$ Premios <span class="sort-arrow" id="rs-9"></span></th>
                 </tr>
             </thead>
             <tbody>
@@ -106,15 +105,35 @@
                     <td class="text-right">${{ "{:,.0f}".format(j.monto_cortesias or 0) }}</td>
                     <td class="text-right">{{ j.total_premios }}</td>
                     <td class="text-right">${{ "{:,.0f}".format(j.monto_premios or 0) }}</td>
-                    <td class="text-right">
-                        <span class="badge {% if j.pct_total_coin_in > 5 %}badge-warn{% elif j.pct_total_coin_in > 1 %}badge-info{% else %}badge-good{% endif %}">
-                            {{ "%.3f"|format(j.pct_total_coin_in or 0) }}%
-                        </span>
-                    </td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
 </div>
+
+<script>
+var resumenSortCol = -1, resumenSortAsc = true;
+function sortResumen(col, tipo) {
+    var table = document.getElementById('tabla-resumen-jugadores');
+    var tbody = table.querySelector('tbody');
+    var rows = Array.from(tbody.querySelectorAll('tr'));
+    if (resumenSortCol === col) { resumenSortAsc = !resumenSortAsc; } else { resumenSortCol = col; resumenSortAsc = tipo === 'text'; }
+    rows.sort(function(a, b) {
+        var aT = a.cells[col].textContent.trim(), bT = b.cells[col].textContent.trim();
+        if (tipo === 'num') {
+            var aV = parseFloat(aT.replace(/[$,%\s]/g, '').replace(/,/g, '')) || 0;
+            var bV = parseFloat(bT.replace(/[$,%\s]/g, '').replace(/,/g, '')) || 0;
+            return resumenSortAsc ? aV - bV : bV - aV;
+        } else {
+            return resumenSortAsc ? aT.localeCompare(bT) : bT.localeCompare(aT);
+        }
+    });
+    rows.forEach(function(r) { tbody.appendChild(r); });
+    for (var i = 0; i <= 9; i++) {
+        var el = document.getElementById('rs-' + i);
+        el.textContent = i === col ? (resumenSortAsc ? '▲' : '▼') : '';
+    }
+}
+</script>
 {% endblock %}

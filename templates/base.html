@@ -318,6 +318,8 @@
             <a href="{{ url_for('analisis_premios') }}" class="{{ 'active' if request.endpoint == 'analisis_premios' }}">Premios</a>
             <a href="{{ url_for('analisis_resumen') }}" class="{{ 'active' if request.endpoint == 'analisis_resumen' }}">Resumen</a>
             <a href="{{ url_for('control_invitaciones') }}" class="{{ 'active' if request.endpoint == 'control_invitaciones' }}">Control Invitaciones</a>
+            <a href="{{ url_for('control_invitaciones_mda') }}" class="{{ 'active' if request.endpoint == 'control_invitaciones_mda' }}">Invitaciones MDA</a>
+            <a href="{{ url_for('control_invitaciones_mdj') }}" class="{{ 'active' if request.endpoint == 'control_invitaciones_mdj' }}">Invitaciones MDJ</a>
             <a href="{{ url_for('auditoria_coinin_cero') }}" class="{{ 'active' if request.endpoint == 'auditoria_coinin_cero' }}">Auditoría Coin In Cero</a>
             <a href="{{ url_for('exportar_reportes') }}" class="{{ 'active' if request.endpoint == 'exportar_reportes' }}">📥 Exportar</a>
         </div>

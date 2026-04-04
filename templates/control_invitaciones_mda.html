@@ -1,8 +1,8 @@
 {% extends "base.html" %}
-{% block title %}Control de Invitaciones{% endblock %}
+{% block title %}Control Invitaciones MDA{% endblock %}
 {% block content %}
 <div class="card">
-    <h2>Control de Invitaciones</h2>
+    <h2>Control de Invitaciones — MDA (Máquinas)</h2>
     <p class="text-muted mb-1">Invitación permitida = Coin In × {{ "%.1f"|format(pct_primario * 100) }}% (primario) × % categoría</p>
     <form method="get" class="mb-1" id="filtros-form">
         <div style="display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end;">
@@ -21,15 +21,6 @@
                     <option value="">Todos</option>
                     {% for m in meses_disp %}
                         <option value="{{ m }}" {% if m == mes_actual %}selected{% endif %}>{{ {'01':'Enero','02':'Febrero','03':'Marzo','04':'Abril','05':'Mayo','06':'Junio','07':'Julio','08':'Agosto','09':'Septiembre','10':'Octubre','11':'Noviembre','12':'Diciembre'}.get(m, m) }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div>
-                <label for="area">Sección</label><br>
-                <select name="area" id="area" onchange="this.form.submit()">
-                    <option value="">Todas</option>
-                    {% for a in areas %}
-                        <option value="{{ a }}" {% if a == area_actual %}selected{% endif %}>{{ a }}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -64,7 +55,7 @@
         </div>
         <div class="kpi">
             <div class="number yellow">${{ "{:,.0f}".format(total_coin_in_periodo or 0) }}</div>
-            <div class="label">Total Coin In</div>
+            <div class="label">Total Coin In MDA</div>
         </div>
         <div class="kpi">
             <div class="number {% if pct_cortesias_coin_in > 1 %}red{% else %}green{% endif %}">{{ "%.3f"|format(pct_cortesias_coin_in or 0) }}%</div>
@@ -72,16 +63,6 @@
         </div>
     </div>
 </div>
-
-{% if chart_labels and chart_cantidades and chart_labels|length > 0 %}
-<div class="card">
-    <h2>📊 {{ chart_titulo }}</h2>
-    <div style="display: flex; align-items: center; justify-content: center; gap: 2rem; flex-wrap: wrap;">
-        <canvas id="pieChart" width="320" height="320" style="max-width: 320px;"></canvas>
-        <div id="pieLegend" style="font-size: 0.82rem;"></div>
-    </div>
-</div>
-{% endif %}
 
 {% if resultados is not none %}
 <div class="card">
@@ -186,57 +167,6 @@ document.addEventListener('DOMContentLoaded', function() {
             rows.forEach(r => tbody.appendChild(r));
         });
     });
-
-    // Pie chart — Cortesías por Sección
-    const canvas = document.getElementById('pieChart');
-    if (canvas) {
-        const labels = {{ chart_labels | tojson }};
-        const data = {{ chart_cantidades | tojson }};
-        const colors = ['#38bdf8','#22c55e','#fbbf24','#f43f5e','#a78bfa','#fb923c','#2dd4bf','#e879f9','#94a3b8','#60a5fa'];
-        const total = data.reduce((s, v) => s + v, 0);
-        const ctx = canvas.getContext('2d');
-        const cx = canvas.width / 2, cy = canvas.height / 2, r = Math.min(cx, cy) - 16;
-        let startAngle = -Math.PI / 2;
-
-        // Draw slices
-        data.forEach((val, i) => {
-            const slice = (val / total) * 2 * Math.PI;
-            ctx.beginPath();
-            ctx.moveTo(cx, cy);
-            ctx.arc(cx, cy, r, startAngle, startAngle + slice);
-            ctx.closePath();
-            ctx.fillStyle = colors[i % colors.length];
-            ctx.fill();
-            ctx.strokeStyle = '#0f172a';
-            ctx.lineWidth = 2;
-            ctx.stroke();
-
-            // Label inside slice
-            if (val / total > 0.05) {
-                const mid = startAngle + slice / 2;
-                const lx = cx + r * 0.6 * Math.cos(mid);
-                const ly = cy + r * 0.6 * Math.sin(mid);
-                ctx.fillStyle = '#fff';
-                ctx.font = 'bold 12px Segoe UI, sans-serif';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText(val.toLocaleString(), lx, ly);
-            }
-            startAngle += slice;
-        });
-
-        // Legend
-        const legend = document.getElementById('pieLegend');
-        if (legend) {
-            legend.innerHTML = labels.map((l, i) => {
-                const pct = total > 0 ? (data[i] / total * 100).toFixed(1) : 0;
-                return '<div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.4rem;">' +
-                    '<span style="display:inline-block;width:14px;height:14px;border-radius:3px;background:' + colors[i % colors.length] + ';"></span>' +
-                    '<span style="color:#e2e8f0;">' + l + '</span>' +
-                    '<span style="color:#64748b;font-size:0.75rem;">(' + data[i].toLocaleString() + ' — ' + pct + '%)</span></div>';
-            }).join('');
-        }
-    }
 });
 </script>
 {% endblock %}

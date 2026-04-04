@@ -271,14 +271,14 @@ def cargar_datos():
     resultados = []
 
     file_map = {
-        'archivo_srw': ('srw_jugadores', cargar_srw),
-        'archivo_cortesias': ('cortesias', cargar_cortesias),
-        'archivo_premios': ('premios', cargar_premios),
-        'archivo_mesas_puntos': ('mesas_puntos', cargar_mesas_puntos),
+        'archivo_srw': ('srw_jugadores', cargar_srw, 'gaming_date'),
+        'archivo_cortesias': ('cortesias', cargar_cortesias, 'fecha_jornada'),
+        'archivo_premios': ('premios', cargar_premios, 'fecha_jornada'),
+        'archivo_mesas_puntos': ('mesas_puntos', cargar_mesas_puntos, 'fecha_operacion'),
     }
 
     try:
-        for field, (tabla, etl_fn) in file_map.items():
+        for field, (tabla, etl_fn, col_fecha) in file_map.items():
             f = request.files.get(field)
             if not f or f.filename == '':
                 continue
@@ -290,8 +290,17 @@ def cargar_datos():
             filepath = os.path.join(UPLOAD_FOLDER, filename)
             f.save(filepath)
 
-            db.execute(f"DELETE FROM {tabla}")
             df = etl_fn(filepath)
+
+            # Borrar solo registros del rango de fechas del archivo cargado
+            fechas = df[col_fecha].dropna()
+            if not fechas.empty:
+                fecha_min = fechas.min()
+                fecha_max = fechas.max()
+                db.execute(
+                    f"DELETE FROM {tabla} WHERE {col_fecha} BETWEEN ? AND ?",
+                    (fecha_min, fecha_max)
+                )
             df.to_sql(tabla, db, if_exists='append', index=False)
             db.execute(
                 "INSERT INTO carga_log (tabla, archivo, filas, fecha_carga) VALUES (?,?,?,?)",
@@ -433,13 +442,48 @@ def analisis_cortesias():
         dia_where = dia_where + " AND fecha_jornada IS NOT NULL"
     else:
         dia_where = "WHERE fecha_jornada IS NOT NULL"
-    por_dia = db.execute(f"""
+    por_dia_raw = db.execute(f"""
         SELECT fecha_jornada, COUNT(*) as cantidad,
                SUM(micros) as monto_total
         FROM cortesias {dia_where}
         GROUP BY fecha_jornada
         ORDER BY fecha_jornada
     """, dia_params).fetchall()
+
+    # Coin In por día - MDA (slots/srw)
+    sw_dia, sp_dia = build_date_filter('gaming_date', anio, mes)
+    coin_mda_dia = db.execute(f"""
+        SELECT gaming_date as fecha, SUM(coin_in) as coin_in
+        FROM srw_jugadores {sw_dia}
+        {'AND' if sw_dia else 'WHERE'} gaming_date IS NOT NULL
+        GROUP BY gaming_date
+    """, sp_dia).fetchall()
+    mda_por_fecha = {r['fecha']: r['coin_in'] or 0 for r in coin_mda_dia}
+
+    # Coin In por día - MDY (mesas)
+    mw_dia, mp_dia = build_date_filter('fecha_operacion', anio, mes)
+    coin_mdy_dia = db.execute(f"""
+        SELECT fecha_operacion as fecha, SUM(coin_in_puntos) as coin_in
+        FROM mesas_puntos {mw_dia}
+        {'AND' if mw_dia else 'WHERE'} fecha_operacion IS NOT NULL
+        GROUP BY fecha_operacion
+    """, mp_dia).fetchall()
+    mdy_por_fecha = {r['fecha']: r['coin_in'] or 0 for r in coin_mdy_dia}
+
+    dias_semana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
+    por_dia = []
+    for d in por_dia_raw:
+        row = dict(d)
+        fecha_str = str(row['fecha_jornada'])
+        try:
+            from datetime import datetime as _dt
+            fecha = _dt.strptime(fecha_str, '%Y-%m-%d')
+            row['dia_semana'] = dias_semana[fecha.weekday()]
+        except Exception:
+            row['dia_semana'] = ''
+        row['coin_in_mda'] = mda_por_fecha.get(fecha_str, 0)
+        row['coin_in_mdy'] = mdy_por_fecha.get(fecha_str, 0)
+        por_dia.append(row)
 
     # Totales
     totales = db.execute(f"""
@@ -566,8 +610,44 @@ def analisis_resumen():
     mw_res, mp_res = build_date_filter('m.fecha_operacion', anio, mes)
     mw_res_solo, mp_res_solo = build_date_filter('fecha_operacion', anio, mes)
 
+    # KPIs globales (coin_in = SRW + mesas)
+    kpis_srw = db.execute(f"""
+        SELECT
+            COALESCE(SUM(coin_in), 0) as total_coin_in,
+            COALESCE(SUM(promo_in), 0) as total_promo_in,
+            COALESCE(SUM(total_games), 0) as total_games,
+            COUNT(DISTINCT player_id) as jugadores_srw
+        FROM srw_jugadores {sw}
+    """, sp).fetchone()
+    kpis_mesas = db.execute(f"""
+        SELECT COALESCE(SUM(coin_in_puntos), 0) as total_coin_in_mesas
+        FROM mesas_puntos {mw_res_solo}
+    """, mp_res_solo).fetchone()
+    kpis_cort = db.execute(f"""
+        SELECT COALESCE(SUM(micros), 0) as total_cortesias,
+               COUNT(DISTINCT cliente_id) as clientes_cortesias
+        FROM cortesias {cw}
+    """, cparam).fetchone()
+    kpis_prem = db.execute(f"""
+        SELECT COALESCE(SUM(transferencia_final), 0) as total_premios,
+               COUNT(DISTINCT cliente_id) as clientes_premios
+        FROM premios {pw}
+    """, pparam).fetchone()
+    # Combinar en dict compatible
+    total_coin_in_global = kpis_srw['total_coin_in'] + kpis_mesas['total_coin_in_mesas']
+    kpis = {
+        'total_coin_in': total_coin_in_global,
+        'total_promo_in': kpis_srw['total_promo_in'],
+        'total_games': kpis_srw['total_games'],
+        'jugadores_srw': kpis_srw['jugadores_srw'],
+        'total_cortesias': kpis_cort['total_cortesias'],
+        'clientes_cortesias': kpis_cort['clientes_cortesias'],
+        'total_premios': kpis_prem['total_premios'],
+        'clientes_premios': kpis_prem['clientes_premios'],
+    }
+
     # Resumen general de jugadores con cortesías + premios (coin_in = SRW + mesas)
-    jugadores = db.execute(f"""
+    jugadores_raw = db.execute(f"""
         SELECT
             s.player_id,
             s.full_name,
@@ -579,10 +659,7 @@ def analisis_resumen():
             COALESCE(c.total_cortesias, 0) as total_cortesias,
             COALESCE(c.monto_cortesias, 0) as monto_cortesias,
             COALESCE(p.total_premios, 0) as total_premios,
-            COALESCE(p.monto_premios, 0) as monto_premios,
-            CASE WHEN (s.total_coin_in + COALESCE(m.coin_in_mesas, 0)) > 0
-                 THEN ROUND((COALESCE(c.monto_cortesias,0) + COALESCE(p.monto_premios,0)) * 100.0 / (s.total_coin_in + COALESCE(m.coin_in_mesas, 0)), 4)
-                 ELSE 0 END as pct_total_coin_in
+            COALESCE(p.monto_premios, 0) as monto_premios
         FROM (
             SELECT player_id, MAX(full_name) as full_name,
                    MAX(player_level) as player_level,
@@ -612,40 +689,15 @@ def analisis_resumen():
         ORDER BY total_coin_in DESC
     """, sp + cparam + pparam + mp_res).fetchall()
 
-    # KPIs globales (coin_in = SRW + mesas)
-    kpis_srw = db.execute(f"""
-        SELECT
-            COALESCE(SUM(coin_in), 0) as total_coin_in,
-            COALESCE(SUM(promo_in), 0) as total_promo_in,
-            COALESCE(SUM(total_games), 0) as total_games,
-            COUNT(DISTINCT player_id) as jugadores_srw
-        FROM srw_jugadores {sw}
-    """, sp).fetchone()
-    kpis_mesas = db.execute(f"""
-        SELECT COALESCE(SUM(coin_in_puntos), 0) as total_coin_in_mesas
-        FROM mesas_puntos {mw_res_solo}
-    """, mp_res_solo).fetchone()
-    kpis_cort = db.execute(f"""
-        SELECT COALESCE(SUM(micros), 0) as total_cortesias,
-               COUNT(DISTINCT cliente_id) as clientes_cortesias
-        FROM cortesias {cw}
-    """, cparam).fetchone()
-    kpis_prem = db.execute(f"""
-        SELECT COALESCE(SUM(transferencia_final), 0) as total_premios,
-               COUNT(DISTINCT cliente_id) as clientes_premios
-        FROM premios {pw}
-    """, pparam).fetchone()
-    # Combinar en dict compatible
-    kpis = {
-        'total_coin_in': kpis_srw['total_coin_in'] + kpis_mesas['total_coin_in_mesas'],
-        'total_promo_in': kpis_srw['total_promo_in'],
-        'total_games': kpis_srw['total_games'],
-        'jugadores_srw': kpis_srw['jugadores_srw'],
-        'total_cortesias': kpis_cort['total_cortesias'],
-        'clientes_cortesias': kpis_cort['clientes_cortesias'],
-        'total_premios': kpis_prem['total_premios'],
-        'clientes_premios': kpis_prem['clientes_premios'],
-    }
+    # Calcular % = (coin_in cliente / coin_in total mes) * 100
+    jugadores = []
+    for j in jugadores_raw:
+        row = dict(j)
+        if total_coin_in_global > 0:
+            row['pct_total_coin_in'] = round((row['total_coin_in'] or 0) * 100.0 / total_coin_in_global, 3)
+        else:
+            row['pct_total_coin_in'] = 0
+        jugadores.append(row)
 
     return render_template('analisis_resumen.html', jugadores=jugadores, kpis=kpis,
                            anios=anios, meses_disp=meses_disp,
@@ -924,6 +976,23 @@ def control_invitaciones():
     chart_labels = [r['etiqueta'] or 'Sin asignar' for r in chart_rows]
     chart_cantidades = [r['cantidad'] for r in chart_rows]
 
+    # Totales para KPI: cortesias total y coin in total del periodo
+    cw_kpi, cp_kpi = build_date_filter('fecha_jornada', anio, mes)
+    kpi_cortesias = db.execute(f"""
+        SELECT COALESCE(SUM(micros), 0) as total FROM cortesias {cw_kpi}
+    """, cp_kpi).fetchone()
+    sw_kpi, sp_kpi = build_date_filter('gaming_date', anio, mes)
+    kpi_coin_srw = db.execute(f"""
+        SELECT COALESCE(SUM(coin_in), 0) as total FROM srw_jugadores {sw_kpi}
+    """, sp_kpi).fetchone()
+    mw_kpi, mp_kpi = build_date_filter('fecha_operacion', anio, mes)
+    kpi_coin_mesas = db.execute(f"""
+        SELECT COALESCE(SUM(coin_in_puntos), 0) as total FROM mesas_puntos {mw_kpi}
+    """, mp_kpi).fetchone()
+    total_cortesias_periodo = kpi_cortesias['total']
+    total_coin_in_periodo = kpi_coin_srw['total'] + kpi_coin_mesas['total']
+    pct_cortesias_coin_in = round(total_cortesias_periodo * 100.0 / total_coin_in_periodo, 3) if total_coin_in_periodo > 0 else 0
+
     return render_template('control_invitaciones.html',
                            resultados=resultados,
                            dias_totales=dias_totales,
@@ -932,10 +1001,232 @@ def control_invitaciones():
                            chart_labels=chart_labels,
                            chart_cantidades=chart_cantidades,
                            chart_titulo=chart_titulo,
+                           total_cortesias_periodo=total_cortesias_periodo,
+                           total_coin_in_periodo=total_coin_in_periodo,
+                           pct_cortesias_coin_in=pct_cortesias_coin_in,
                            anios=anios, meses_disp=meses_disp,
                            areas=areas, jefes_disp=jefes_disp,
                            anio_actual=anio, mes_actual=mes,
                            area_actual=area, jefe_actual=jefe)
+
+
+@app.route('/control/invitaciones-mda')
+def control_invitaciones_mda():
+    db = get_db()
+    anio = request.args.get('anio', '')
+    mes = request.args.get('mes', '')
+    jefe = request.args.get('jefe', '')
+    anios, meses_disp = get_anios_meses(db)
+
+    # Jefes de MDA
+    jefes_disp = db.execute(
+        "SELECT usuario_id, nombre FROM jefaturas WHERE area = 'MDA' ORDER BY nombre"
+    ).fetchall()
+    jefes_disp = [(r['usuario_id'], r['nombre']) for r in jefes_disp]
+
+    jefe_filter = ""
+    jefe_params = []
+    if jefe:
+        jefe_filter = " AND c.usuario_id = ?"
+        jefe_params = [jefe]
+    else:
+        jefe_filter = " AND c.usuario_id IN (SELECT usuario_id FROM jefaturas WHERE area = 'MDA')"
+
+    sw, sp = build_date_filter('s.gaming_date', anio, mes)
+    cw, cparam = build_date_filter('c.fecha_jornada', anio, mes)
+    pw, pparam = build_date_filter('p.fecha_jornada', anio, mes)
+
+    # Días totales
+    sw_solo, sp_solo = build_date_filter('gaming_date', anio, mes)
+    dias_totales_row = db.execute(f"""
+        SELECT COUNT(DISTINCT gaming_date) as dias FROM srw_jugadores {sw_solo}
+    """, sp_solo).fetchone()
+    dias_totales = dias_totales_row['dias'] or 1
+
+    prim_row = db.execute("SELECT porcentaje FROM categorias_nivel WHERE categoria = 'Primario'").fetchone()
+    pct_primario = prim_row['porcentaje'] if prim_row else 0
+    cat_rows = db.execute("SELECT categoria, porcentaje FROM categorias_nivel WHERE categoria != 'Primario'").fetchall()
+    pct_categoria = {r['categoria']: r['porcentaje'] for r in cat_rows}
+
+    cw_inner = cw
+    if jefe_filter:
+        cw_inner = (cw + jefe_filter) if cw else ("WHERE 1=1" + jefe_filter)
+
+    jugadores_raw = db.execute(f"""
+        SELECT
+            s.player_id,
+            MAX(s.full_name) as nombre,
+            MAX(s.player_level) as nivel,
+            SUM(s.coin_in) as coin_in_mensual,
+            COUNT(DISTINCT s.gaming_date) as dias_asistidos,
+            COALESCE(c.total_cortesias, 0) as total_cortesias,
+            COALESCE(c.monto_micros, 0) as monto_micros,
+            COALESCE(p.cant_premios, 0) as cant_premios,
+            COALESCE(p.monto_premios, 0) as monto_premios
+        FROM srw_jugadores s
+        LEFT JOIN (
+            SELECT cliente_id, COUNT(*) as total_cortesias, SUM(micros) as monto_micros
+            FROM cortesias c {cw_inner}
+            GROUP BY cliente_id
+        ) c ON s.player_id = c.cliente_id
+        LEFT JOIN (
+            SELECT cliente_id, COUNT(*) as cant_premios, SUM(transferencia_final) as monto_premios
+            FROM premios p {pw}
+            GROUP BY cliente_id
+        ) p ON s.player_id = p.cliente_id
+        {sw}
+        GROUP BY s.player_id
+        HAVING COALESCE(c.total_cortesias, 0) > 0
+        ORDER BY coin_in_mensual DESC
+    """, cparam + jefe_params + pparam + sp).fetchall()
+
+    resultados = []
+    for j in jugadores_raw:
+        nivel = j['nivel'] or ''
+        pct_cat = pct_categoria.get(nivel, 0)
+        coin_in = j['coin_in_mensual'] or 0
+        invitacion_mensual = coin_in * pct_primario * pct_cat
+        monto_micros = j['monto_micros'] or 0
+        saldo = invitacion_mensual - monto_micros
+        dias = j['dias_asistidos'] or 0
+        pct_asistencia = round(dias * 100.0 / dias_totales, 1) if dias_totales > 0 else 0
+        resultados.append({
+            'nombre': j['nombre'], 'nivel': nivel, 'dias_asistidos': dias,
+            'pct_asistencia': pct_asistencia, 'cant_premios': j['cant_premios'],
+            'monto_premios': j['monto_premios'] or 0, 'coin_in_mensual': coin_in,
+            'total_cortesias': j['total_cortesias'], 'monto_micros': monto_micros,
+            'invitacion_mensual': round(invitacion_mensual), 'saldo': round(saldo),
+        })
+
+    # KPIs
+    cw_kpi, cp_kpi = build_date_filter('fecha_jornada', anio, mes)
+    kpi_cortesias = db.execute(f"SELECT COALESCE(SUM(micros), 0) as total FROM cortesias {cw_kpi}", cp_kpi).fetchone()
+    sw_kpi, sp_kpi = build_date_filter('gaming_date', anio, mes)
+    kpi_coin = db.execute(f"SELECT COALESCE(SUM(coin_in), 0) as total FROM srw_jugadores {sw_kpi}", sp_kpi).fetchone()
+    total_cortesias_periodo = kpi_cortesias['total']
+    total_coin_in_periodo = kpi_coin['total']
+    pct_cortesias_coin_in = round(total_cortesias_periodo * 100.0 / total_coin_in_periodo, 3) if total_coin_in_periodo > 0 else 0
+
+    return render_template('control_invitaciones_mda.html',
+                           resultados=resultados, dias_totales=dias_totales,
+                           pct_primario=pct_primario, pct_categoria=pct_categoria,
+                           total_cortesias_periodo=total_cortesias_periodo,
+                           total_coin_in_periodo=total_coin_in_periodo,
+                           pct_cortesias_coin_in=pct_cortesias_coin_in,
+                           anios=anios, meses_disp=meses_disp,
+                           jefes_disp=jefes_disp,
+                           anio_actual=anio, mes_actual=mes, jefe_actual=jefe)
+
+
+@app.route('/control/invitaciones-mdj')
+def control_invitaciones_mdj():
+    db = get_db()
+    anio = request.args.get('anio', '')
+    mes = request.args.get('mes', '')
+    jefe = request.args.get('jefe', '')
+    anios, meses_disp = get_anios_meses(db)
+
+    # Jefes de MDJ (mesas)
+    jefes_disp = db.execute(
+        "SELECT usuario_id, nombre FROM jefaturas WHERE area = 'MDJ' ORDER BY nombre"
+    ).fetchall()
+    jefes_disp = [(r['usuario_id'], r['nombre']) for r in jefes_disp]
+
+    jefe_filter = ""
+    jefe_params = []
+    if jefe:
+        jefe_filter = " AND c.usuario_id = ?"
+        jefe_params = [jefe]
+    else:
+        jefe_filter = " AND c.usuario_id IN (SELECT usuario_id FROM jefaturas WHERE area = 'MDJ')"
+
+    cw, cparam = build_date_filter('c.fecha_jornada', anio, mes)
+    pw, pparam = build_date_filter('p.fecha_jornada', anio, mes)
+    mw, mparam = build_date_filter('mp.fecha_operacion', anio, mes)
+
+    # Días totales
+    mw_solo, mp_solo = build_date_filter('fecha_operacion', anio, mes)
+    dias_totales_row = db.execute(f"""
+        SELECT COUNT(DISTINCT fecha_operacion) as dias FROM mesas_puntos {mw_solo}
+    """, mp_solo).fetchone()
+    dias_totales = dias_totales_row['dias'] or 1
+
+    prim_row = db.execute("SELECT porcentaje FROM categorias_nivel WHERE categoria = 'Primario'").fetchone()
+    pct_primario = prim_row['porcentaje'] if prim_row else 0
+    cat_rows = db.execute("SELECT categoria, porcentaje FROM categorias_nivel WHERE categoria != 'Primario'").fetchall()
+    pct_categoria = {r['categoria']: r['porcentaje'] for r in cat_rows}
+
+    cw_inner = cw
+    if jefe_filter:
+        cw_inner = (cw + jefe_filter) if cw else ("WHERE 1=1" + jefe_filter)
+
+    jugadores_raw = db.execute(f"""
+        SELECT
+            mp.cliente_id as player_id,
+            MAX(mp.cliente_nombre) as nombre,
+            COALESCE(MAX(s.player_level), 'MDJ') as nivel,
+            SUM(mp.coin_in_puntos) as coin_in_mensual,
+            COUNT(DISTINCT mp.fecha_operacion) as dias_asistidos,
+            COALESCE(c.total_cortesias, 0) as total_cortesias,
+            COALESCE(c.monto_micros, 0) as monto_micros,
+            COALESCE(p.cant_premios, 0) as cant_premios,
+            COALESCE(p.monto_premios, 0) as monto_premios
+        FROM mesas_puntos mp
+        LEFT JOIN (
+            SELECT player_id, MAX(player_level) as player_level FROM srw_jugadores GROUP BY player_id
+        ) s ON mp.cliente_id = s.player_id
+        LEFT JOIN (
+            SELECT cliente_id, COUNT(*) as total_cortesias, SUM(micros) as monto_micros
+            FROM cortesias c {cw_inner}
+            GROUP BY cliente_id
+        ) c ON mp.cliente_id = c.cliente_id
+        LEFT JOIN (
+            SELECT cliente_id, COUNT(*) as cant_premios, SUM(transferencia_final) as monto_premios
+            FROM premios p {pw}
+            GROUP BY cliente_id
+        ) p ON mp.cliente_id = p.cliente_id
+        {mw}
+        GROUP BY mp.cliente_id
+        HAVING COALESCE(c.total_cortesias, 0) > 0
+        ORDER BY coin_in_mensual DESC
+    """, cparam + jefe_params + pparam + mparam).fetchall()
+
+    resultados = []
+    for j in jugadores_raw:
+        nivel = j['nivel'] or 'MDJ'
+        pct_cat = pct_categoria.get(nivel, 0)
+        coin_in = j['coin_in_mensual'] or 0
+        invitacion_mensual = coin_in * pct_primario * pct_cat
+        monto_micros = j['monto_micros'] or 0
+        saldo = invitacion_mensual - monto_micros
+        dias = j['dias_asistidos'] or 0
+        pct_asistencia = round(dias * 100.0 / dias_totales, 1) if dias_totales > 0 else 0
+        resultados.append({
+            'nombre': j['nombre'], 'nivel': nivel, 'dias_asistidos': dias,
+            'pct_asistencia': pct_asistencia, 'cant_premios': j['cant_premios'],
+            'monto_premios': j['monto_premios'] or 0, 'coin_in_mensual': coin_in,
+            'total_cortesias': j['total_cortesias'], 'monto_micros': monto_micros,
+            'invitacion_mensual': round(invitacion_mensual), 'saldo': round(saldo),
+        })
+
+    # KPIs
+    cw_kpi, cp_kpi = build_date_filter('fecha_jornada', anio, mes)
+    kpi_cortesias = db.execute(f"SELECT COALESCE(SUM(micros), 0) as total FROM cortesias {cw_kpi}", cp_kpi).fetchone()
+    mw_kpi, mp_kpi = build_date_filter('fecha_operacion', anio, mes)
+    kpi_coin = db.execute(f"SELECT COALESCE(SUM(coin_in_puntos), 0) as total FROM mesas_puntos {mw_kpi}", mp_kpi).fetchone()
+    total_cortesias_periodo = kpi_cortesias['total']
+    total_coin_in_periodo = kpi_coin['total']
+    pct_cortesias_coin_in = round(total_cortesias_periodo * 100.0 / total_coin_in_periodo, 3) if total_coin_in_periodo > 0 else 0
+
+    return render_template('control_invitaciones_mdj.html',
+                           resultados=resultados, dias_totales=dias_totales,
+                           pct_primario=pct_primario, pct_categoria=pct_categoria,
+                           total_cortesias_periodo=total_cortesias_periodo,
+                           total_coin_in_periodo=total_coin_in_periodo,
+                           pct_cortesias_coin_in=pct_cortesias_coin_in,
+                           anios=anios, meses_disp=meses_disp,
+                           jefes_disp=jefes_disp,
+                           anio_actual=anio, mes_actual=mes, jefe_actual=jefe)
 
 
 @app.route('/auditoria/coinin-cero')
@@ -1350,6 +1641,82 @@ def exportar_generar():
             df = pd.DataFrame(data)
             if not df.empty:
                 df.to_excel(writer, sheet_name='Control Invitaciones', index=False)
+
+        if 'invitaciones_mda' in secciones:
+            sw_m, sp_m = build_date_filter('s.gaming_date', anio, mes)
+            cw_m, cp_m = build_date_filter('c.fecha_jornada', anio, mes)
+            pw_m, pp_m = build_date_filter('p.fecha_jornada', anio, mes)
+            sw_solo_m, sp_solo_m = build_date_filter('gaming_date', anio, mes)
+            dias_mda = db.execute(f"SELECT COUNT(DISTINCT gaming_date) as d FROM srw_jugadores {sw_solo_m}", sp_solo_m).fetchone()['d'] or 1
+            prim_m = db.execute("SELECT porcentaje FROM categorias_nivel WHERE categoria = 'Primario'").fetchone()
+            pct_prim_m = prim_m['porcentaje'] if prim_m else 0
+            cat_map_m = {r['categoria']: r['porcentaje'] for r in db.execute("SELECT categoria, porcentaje FROM categorias_nivel WHERE categoria != 'Primario'").fetchall()}
+            cw_inner_m = cw_m
+            jefe_f_mda = " AND c.usuario_id IN (SELECT usuario_id FROM jefaturas WHERE area = 'MDA')"
+            cw_inner_m = (cw_m + jefe_f_mda) if cw_m else ("WHERE 1=1" + jefe_f_mda)
+            rows_mda = db.execute(f"""
+                SELECT s.player_id, MAX(s.full_name) as nombre, MAX(s.player_level) as nivel,
+                       SUM(s.coin_in) as coin_in, COUNT(DISTINCT s.gaming_date) as dias,
+                       COALESCE(c.total_cortesias, 0) as cortesias, COALESCE(c.monto_micros, 0) as micros,
+                       COALESCE(p.cant_premios, 0) as premios, COALESCE(p.monto_premios, 0) as monto_premios
+                FROM srw_jugadores s
+                LEFT JOIN (SELECT cliente_id, COUNT(*) as total_cortesias, SUM(micros) as monto_micros FROM cortesias c {cw_inner_m} GROUP BY cliente_id) c ON s.player_id = c.cliente_id
+                LEFT JOIN (SELECT cliente_id, COUNT(*) as cant_premios, SUM(transferencia_final) as monto_premios FROM premios p {pw_m} GROUP BY cliente_id) p ON s.player_id = p.cliente_id
+                {sw_m} GROUP BY s.player_id HAVING COALESCE(c.total_cortesias, 0) > 0 ORDER BY coin_in DESC
+            """, cp_m + pp_m + sp_m).fetchall()
+            data_mda = []
+            for r in rows_mda:
+                ci = r['coin_in'] or 0
+                pc = cat_map_m.get(r['nivel'] or '', 0)
+                inv = ci * pct_prim_m * pc
+                mic = r['micros'] or 0
+                data_mda.append({'Nombre': r['nombre'], 'Nivel': r['nivel'], 'Dias': r['dias'],
+                    'Pct_Asistencia': round(r['dias'] * 100.0 / dias_mda, 1),
+                    'Premios': r['premios'], 'Monto_Premios': r['monto_premios'] or 0,
+                    'Coin_In': ci, 'Invitacion_Max': round(inv),
+                    'Cortesias_Cant': r['cortesias'], 'Cortesias_Monto': mic, 'Saldo': round(inv - mic)})
+            df = pd.DataFrame(data_mda)
+            if not df.empty:
+                df.to_excel(writer, sheet_name='Invitaciones MDA', index=False)
+
+        if 'invitaciones_mdj' in secciones:
+            cw_j, cp_j = build_date_filter('c.fecha_jornada', anio, mes)
+            pw_j, pp_j = build_date_filter('p.fecha_jornada', anio, mes)
+            mw_j, mp_j = build_date_filter('mp.fecha_operacion', anio, mes)
+            mw_solo_j, mp_solo_j = build_date_filter('fecha_operacion', anio, mes)
+            dias_mdj = db.execute(f"SELECT COUNT(DISTINCT fecha_operacion) as d FROM mesas_puntos {mw_solo_j}", mp_solo_j).fetchone()['d'] or 1
+            prim_j = db.execute("SELECT porcentaje FROM categorias_nivel WHERE categoria = 'Primario'").fetchone()
+            pct_prim_j = prim_j['porcentaje'] if prim_j else 0
+            cat_map_j = {r['categoria']: r['porcentaje'] for r in db.execute("SELECT categoria, porcentaje FROM categorias_nivel WHERE categoria != 'Primario'").fetchall()}
+            cw_inner_j = cw_j
+            jefe_f_mdj = " AND c.usuario_id IN (SELECT usuario_id FROM jefaturas WHERE area = 'MDJ')"
+            cw_inner_j = (cw_j + jefe_f_mdj) if cw_j else ("WHERE 1=1" + jefe_f_mdj)
+            rows_mdj = db.execute(f"""
+                SELECT mp.cliente_id as player_id, MAX(mp.cliente_nombre) as nombre,
+                       COALESCE(MAX(sv.player_level), 'MDJ') as nivel,
+                       SUM(mp.coin_in_puntos) as coin_in, COUNT(DISTINCT mp.fecha_operacion) as dias,
+                       COALESCE(c.total_cortesias, 0) as cortesias, COALESCE(c.monto_micros, 0) as micros,
+                       COALESCE(p.cant_premios, 0) as premios, COALESCE(p.monto_premios, 0) as monto_premios
+                FROM mesas_puntos mp
+                LEFT JOIN (SELECT player_id, MAX(player_level) as player_level FROM srw_jugadores GROUP BY player_id) sv ON mp.cliente_id = sv.player_id
+                LEFT JOIN (SELECT cliente_id, COUNT(*) as total_cortesias, SUM(micros) as monto_micros FROM cortesias c {cw_inner_j} GROUP BY cliente_id) c ON mp.cliente_id = c.cliente_id
+                LEFT JOIN (SELECT cliente_id, COUNT(*) as cant_premios, SUM(transferencia_final) as monto_premios FROM premios p {pw_j} GROUP BY cliente_id) p ON mp.cliente_id = p.cliente_id
+                {mw_j} GROUP BY mp.cliente_id HAVING COALESCE(c.total_cortesias, 0) > 0 ORDER BY coin_in DESC
+            """, cp_j + pp_j + mp_j).fetchall()
+            data_mdj = []
+            for r in rows_mdj:
+                ci = r['coin_in'] or 0
+                pc = cat_map_j.get(r['nivel'] or '', 0)
+                inv = ci * pct_prim_j * pc
+                mic = r['micros'] or 0
+                data_mdj.append({'Nombre': r['nombre'], 'Nivel': r['nivel'], 'Dias': r['dias'],
+                    'Pct_Asistencia': round(r['dias'] * 100.0 / dias_mdj, 1),
+                    'Premios': r['premios'], 'Monto_Premios': r['monto_premios'] or 0,
+                    'Coin_In': ci, 'Invitacion_Max': round(inv),
+                    'Cortesias_Cant': r['cortesias'], 'Cortesias_Monto': mic, 'Saldo': round(inv - mic)})
+            df = pd.DataFrame(data_mdj)
+            if not df.empty:
+                df.to_excel(writer, sheet_name='Invitaciones MDJ', index=False)
 
         if 'auditoria_coinin_cero' in secciones:
             cw, cp = build_date_filter('c.fecha_jornada', anio, mes)
